@@ -15,7 +15,7 @@ const scale = {
     B3: 246.94
 }
 
-let chords = [
+const chords = [
     {
         plane: 1,
         frequencies: [scale.C3, scale.D3, scale.E3, scale.G3],
@@ -118,13 +118,13 @@ let sampler = new Tone.Sampler({
     // "G3": "samples/G3.mp3",
 }).toDestination();
 
-let vibrato = new Tone.Vibrato({
+const vibrato = new Tone.Vibrato({
     maxDelay : 0.005 ,
     frequency : 1 ,
     depth : 0.2
 }).toDestination();
     
-let reverb = new Tone.Reverb({
+const reverb = new Tone.Reverb({
     decay: 5
 }).toDestination();
 
@@ -136,7 +136,7 @@ sampler.connect(reverb);
 window.onload = () => {
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     const controls = new OrbitControls( camera, renderer.domElement );
 
@@ -197,28 +197,25 @@ window.onload = () => {
     let icoWireframe = new Wireframe(icoWireGeometry, wireMaterial);
     scene.add( icoWireframe );
 
-    // test plane
-    const planeGeometry = new THREE.BufferGeometry();
-    planeGeometry.setIndex(planeIndices);
-    planeGeometry.setAttribute('position', new THREE.BufferAttribute( icoVertices , 3 ));
+    // plane wireframes
+    const edgesGeometry = new THREE.BufferGeometry();
+    edgesGeometry.setIndex(planeIndices);
+    edgesGeometry.setAttribute('position', new THREE.BufferAttribute( icoVertices , 3 ));
 
     let basicMaterial = new THREE.MeshBasicMaterial( {color: 0xff0000, side: THREE.DoubleSide, wireframe: true} );
-    let planeMesh = new THREE.Mesh(planeGeometry, basicMaterial)
-    scene.add(planeMesh);
+    let edgesMesh = new THREE.Mesh(edgesGeometry, basicMaterial)
+    scene.add(edgesMesh);
 
-    camera.position.set(0, 1, 4);
+    for(let i = 0; i < 1; i++) {
+        let indices = planeIndices.slice(6 * i, 6 * (i + 1));
+        console.log(indices);
+        initializePlane(indices);
+    }
+
+    camera.position.set(0, 1, 5);
     camera.lookAt(0, 0, 0);
 
     animate();
-
-    function animate() {
-        requestAnimationFrame(animate);
-        controls.update();
-        wireMaterial.resolution.set( window.innerWidth, window.innerHeight ); // resolution of the viewport
-        // icoWireframe.rotation.y += 0.002;
-    
-        renderer.render(scene, camera);
-    }
 
     Tone.loaded().then(()=> {
         Tone.Transport.start();
@@ -251,5 +248,37 @@ window.onload = () => {
     
         renderer.setSize( window.innerWidth, window.innerHeight );
     })
+
+    function animate() {
+        requestAnimationFrame(animate);
+        controls.update();
+        wireMaterial.resolution.set( window.innerWidth, window.innerHeight ); // resolution of the viewport
+        // icoWireframe.rotation.y += 0.002;
+        // edgesMesh.rotation.y += 0.002;
+
+        // icoWireframe.rotation.x += 0.001;
+        // edgesMesh.rotation.x += 0.001;
+
+        // icoWireframe.rotation.z += 0.0005;
+        // edgesMesh.rotation.z += 0.0005;
+    
+        renderer.render(scene, camera);
+    }
+
+    function initializePlane(indices) {
+        let planeGeometry = new THREE.BufferGeometry();
+        planeGeometry.setIndex(indices);
+        planeGeometry.setAttribute('position', new THREE.BufferAttribute( icoVertices , 3 ));
+
+        let basicMaterial = new THREE.MeshBasicMaterial( {color: getRandomColor(), side: THREE.DoubleSide, wireframe: false} );
+        basicMaterial.transparent = true;
+        basicMaterial.opacity = 0.2
+        let planeMesh = new THREE.Mesh(planeGeometry, basicMaterial)
+        scene.add(planeMesh);
+    }
 }   
+
+function getRandomColor() {
+    return Math.floor(Math.random() * 16777216);
+}
 
