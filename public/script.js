@@ -165,7 +165,25 @@ window.onload = () => {
     ];
 
     const planeIndices = [
-        0, 11, 8,   3, 8, 11	
+        0, 11, 8,   3, 8, 11,    // PLANE 1
+        0, 1, 3,    0, 3, 2,     // PLANE 2
+        1, 2, 9,    10, 1, 2,    // PLANE 3
+        4, 9, 7,    7, 10, 4,    // PLANE 4
+        4, 11, 7,   7, 8, 4,     // PLANE 5
+
+        4, 5, 7,    7, 6, 4,     // PLANE 6
+        5, 1, 6,    6, 2, 5,     // PLANE 7
+        1, 8, 2,    2, 11, 1,    // PLANE 8
+        3, 4, 0,    0, 7, 3,     // PLANE 9
+
+        5, 0, 6,    6, 3, 5,     // PLANE 10
+        0, 10, 3,   3, 9, 0,     // PLANE 11
+        2, 4, 1,    1, 7, 2,     // PLANE 12
+
+        10, 11, 8,  8, 9, 11,    // PLANE 13
+        10, 6, 9,   9, 5, 10,    // PLANE 14
+
+        8, 6, 5,    5, 11, 6,    // PLANE 15
     ]
 
     // Main ico
@@ -184,7 +202,7 @@ window.onload = () => {
     planeGeometry.setIndex(planeIndices);
     planeGeometry.setAttribute('position', new THREE.BufferAttribute( icoVertices , 3 ));
 
-    let basicMaterial = new THREE.MeshBasicMaterial( {color: 0xff0000, side: THREE.DoubleSide} );
+    let basicMaterial = new THREE.MeshBasicMaterial( {color: 0xff0000, side: THREE.DoubleSide, wireframe: true} );
     let planeMesh = new THREE.Mesh(planeGeometry, basicMaterial)
     scene.add(planeMesh);
 
