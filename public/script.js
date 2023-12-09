@@ -133,6 +133,8 @@ sampler.volume.value = -20;
 sampler.connect(vibrato);
 sampler.connect(reverb);
 
+let planes = [];
+
 window.onload = () => {
 
     const scene = new THREE.Scene();
@@ -192,9 +194,9 @@ window.onload = () => {
     icoGeometry.setAttribute('position', new THREE.BufferAttribute( icoVertices , 3 ));
 
     let icoWireGeometry = new WireframeGeometry2( icoGeometry );
-    let wireMaterial = new LineMaterial( {color: 0xffffff, linewidth: 2} );
+    let icoWireMaterial = new LineMaterial( {color: 0xffffff, linewidth: 2, depthTest: false} );
 
-    let icoWireframe = new Wireframe(icoWireGeometry, wireMaterial);
+    let icoWireframe = new Wireframe(icoWireGeometry, icoWireMaterial);
     scene.add( icoWireframe );
 
     // plane wireframes
@@ -204,11 +206,10 @@ window.onload = () => {
 
     let basicMaterial = new THREE.MeshBasicMaterial( {color: 0xff0000, side: THREE.DoubleSide, wireframe: true} );
     let edgesMesh = new THREE.Mesh(edgesGeometry, basicMaterial)
-    scene.add(edgesMesh);
+    // scene.add(edgesMesh);
 
-    for(let i = 0; i < 1; i++) {
+    for(let i = 0; i < 15; i++) {
         let indices = planeIndices.slice(6 * i, 6 * (i + 1));
-        console.log(indices);
         initializePlane(indices);
     }
 
@@ -231,10 +232,12 @@ window.onload = () => {
                 let now = Tone.now();
                 if(newLoop.state === "stopped") {
                     newLoop.start(now);
+                    showPlane(i, 0.25);
                     sampler.triggerAttack(chords[i-1].pitches);
                     
                 } else {
                     newLoop.stop(now);
+                    hidePlane(i, 0.25);
                     sampler.triggerRelease(chords[i-1].pitches);
                 }
             
@@ -252,15 +255,27 @@ window.onload = () => {
     function animate() {
         requestAnimationFrame(animate);
         controls.update();
-        wireMaterial.resolution.set( window.innerWidth, window.innerHeight ); // resolution of the viewport
-        // icoWireframe.rotation.y += 0.002;
-        // edgesMesh.rotation.y += 0.002;
+        icoWireMaterial.resolution.set( window.innerWidth, window.innerHeight ); // resolution of the viewport
 
-        // icoWireframe.rotation.x += 0.001;
-        // edgesMesh.rotation.x += 0.001;
+        for(let plane of planes) {
+            plane.lineMaterial.resolution.set( window.innerWidth, window.innerHeight );
 
-        // icoWireframe.rotation.z += 0.0005;
-        // edgesMesh.rotation.z += 0.0005;
+            plane.mesh.rotation.y += 0.002;
+            plane.mesh.rotation.x += 0.001;
+            plane.mesh.rotation.z += 0.0005;
+
+            plane.wireframe.rotation.y += 0.002;
+            plane.wireframe.rotation.x += 0.001;
+            plane.wireframe.rotation.z += 0.0005;
+        }
+        icoWireframe.rotation.y += 0.002;
+        edgesMesh.rotation.y += 0.002;
+
+        icoWireframe.rotation.x += 0.001;
+        edgesMesh.rotation.x += 0.001;
+
+        icoWireframe.rotation.z += 0.0005;
+        edgesMesh.rotation.z += 0.0005;
     
         renderer.render(scene, camera);
     }
@@ -270,15 +285,83 @@ window.onload = () => {
         planeGeometry.setIndex(indices);
         planeGeometry.setAttribute('position', new THREE.BufferAttribute( icoVertices , 3 ));
 
-        let basicMaterial = new THREE.MeshBasicMaterial( {color: getRandomColor(), side: THREE.DoubleSide, wireframe: false} );
-        basicMaterial.transparent = true;
-        basicMaterial.opacity = 0.2
-        let planeMesh = new THREE.Mesh(planeGeometry, basicMaterial)
+        let materialColor = getRandomColor();
+
+        let fillMaterial = new THREE.MeshBasicMaterial( {
+            color: materialColor, 
+            side: THREE.DoubleSide, 
+            polygonOffset: true,
+            polygonOffsetFactor: 1, 
+            polygonOffsetUnits: 1,
+            depthTest: false
+        } );
+
+        fillMaterial.transparent = true;
+        fillMaterial.opacity = 0;
+
+        let planeWireGeometry = new WireframeGeometry2(planeGeometry);
+        let lineMaterial = new LineMaterial( {
+            color: materialColor,
+            linewidth: 2,
+            depthTest: false
+        } );
+
+        lineMaterial.transparent = true;
+        lineMaterial.opacity = 0;
+
+        let planeWireframe = new Wireframe(planeWireGeometry, lineMaterial);
+        let planeMesh = new THREE.Mesh(planeGeometry, fillMaterial)
+        
         scene.add(planeMesh);
+        scene.add(planeWireframe);
+        
+        planes.push({mesh: planeMesh, wireframe: planeWireframe, lineMaterial: lineMaterial, fillMaterial: fillMaterial, color: materialColor});
     }
+
+    function showPlane(planeNum, time = 0.25) {
+
+        let plane = planes[planeNum-1];
+        let lineIncrement = 1 / 60 / time;
+        let fillIncrement = 1 / 180 / time;
+
+        let showInterval = setInterval(()=> {
+
+            if(plane.lineMaterial.opacity + lineIncrement >= 1) {
+                plane.lineMaterial.opacity = 1;
+                plane.fillMaterial.opacity += fillIncrement;
+                clearInterval(showInterval);
+                return;
+            }
+
+            // line opacity 1 in 0.5s, with interval of 60 updates per second
+            plane.lineMaterial.opacity += lineIncrement; 
+            plane.fillMaterial.opacity += fillIncrement;
+        }, 1000/60);
+    }
+
+    function hidePlane(planeNum, time = 0.25) {
+
+        let plane = planes[planeNum-1];
+        let lineDecrement = 1 / 60 / time;
+        let fillDecrement = 1 / 180 / time;
+
+        let showInterval = setInterval(()=> {
+
+            if(plane.lineMaterial.opacity - lineDecrement <= 0) {
+                plane.lineMaterial.opacity = 0;
+                plane.fillMaterial.opacity -= fillDecrement;
+                clearInterval(showInterval);
+                return;
+            }
+
+            // line opacity 1 in 0.5s, with interval of 60 updates per second
+            plane.lineMaterial.opacity -= lineDecrement; 
+            plane.fillMaterial.opacity -= fillDecrement;
+        }, 1000/60);
+    }
+    
 }   
 
 function getRandomColor() {
-    return Math.floor(Math.random() * 16777216);
+    return `hsl(${ Math.floor(Math.random() * 361) }, 100%, 70%)`;
 }
-
