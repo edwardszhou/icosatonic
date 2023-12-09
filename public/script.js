@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { Wireframe } from 'three/addons/lines/Wireframe.js';
 import { WireframeGeometry2 } from 'three/addons/lines/WireframeGeometry2.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 const scale = {
     C3: 130.81,
@@ -134,38 +135,69 @@ sampler.connect(reverb);
 
 window.onload = () => {
 
-    let scene = new THREE.Scene();
-    let camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    let renderer = new THREE.WebGLRenderer({ antialias: true });
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const controls = new OrbitControls( camera, renderer.domElement );
 
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement)
 
-    let geometry = new THREE.IcosahedronGeometry(20, 0);
-    let newGeo = new WireframeGeometry2( geometry );
-    let material = new LineMaterial( {color: 0xffffff, linewidth: 2} );
+    controls.update();
+    controls.enableDamping = true; // an animation loop is required when either damping or auto-rotation are enabled
+    controls.dampingFactor = 0.05;
 
-    let wireframe = new Wireframe(newGeo, material);
-    // wireframe.computeLineDistances();
-    wireframe.scale.set( 1, 1, 1 );
-    scene.add( wireframe );
+    // let geometry = new THREE.IcosahedronGeometry(20, 0);
 
-    // let ico = new THREE.Mesh(geometry, material);
+    const t = ( 1 + Math.sqrt( 5 ) ) / 2;
 
-    // let wireframe = new THREE.WireframeGeometry(geometry);
-    // let ico = new THREE.LineSegments(wireframe);
+    const icoVertices = new Float32Array([
+        - 1, t, 0, 	1, t, 0, 	- 1, - t, 0, 	1, - t, 0,
+        0, - 1, t, 	0, 1, t,	0, - 1, - t, 	0, 1, - t,
+        t, 0, - 1, 	t, 0, 1, 	- t, 0, - 1, 	- t, 0, 1
+    ]);
 
-    // scene.add(ico);
+    const icoIndices = [
+        0, 11, 5, 	0, 5, 1, 	0, 1, 7, 	0, 7, 10, 	0, 10, 11,
+        1, 5, 9, 	5, 11, 4,	11, 10, 2,	10, 7, 6,	7, 1, 8,
+        3, 9, 4, 	3, 4, 2,	3, 2, 6,	3, 6, 8,	3, 8, 9,
+        4, 9, 5, 	2, 4, 11,	6, 2, 10,	8, 6, 7,	9, 8, 1
+    ];
 
-    camera.position.set(0, 10, 40);
+    const planeIndices = [
+        0, 11, 8,   3, 8, 11	
+    ]
+
+    // Main ico
+    const icoGeometry = new THREE.BufferGeometry();
+    icoGeometry.setIndex(icoIndices);
+    icoGeometry.setAttribute('position', new THREE.BufferAttribute( icoVertices , 3 ));
+
+    let icoWireGeometry = new WireframeGeometry2( icoGeometry );
+    let wireMaterial = new LineMaterial( {color: 0xffffff, linewidth: 2} );
+
+    let icoWireframe = new Wireframe(icoWireGeometry, wireMaterial);
+    scene.add( icoWireframe );
+
+    // test plane
+    const planeGeometry = new THREE.BufferGeometry();
+    planeGeometry.setIndex(planeIndices);
+    planeGeometry.setAttribute('position', new THREE.BufferAttribute( icoVertices , 3 ));
+
+    let basicMaterial = new THREE.MeshBasicMaterial( {color: 0xff0000, side: THREE.DoubleSide} );
+    let planeMesh = new THREE.Mesh(planeGeometry, basicMaterial)
+    scene.add(planeMesh);
+
+    camera.position.set(0, 1, 4);
     camera.lookAt(0, 0, 0);
 
     animate();
 
     function animate() {
         requestAnimationFrame(animate);
-        material.resolution.set( window.innerWidth, window.innerHeight ); // resolution of the viewport
-        // wireframe.rotation.y += 0.002;
+        controls.update();
+        wireMaterial.resolution.set( window.innerWidth, window.innerHeight ); // resolution of the viewport
+        // icoWireframe.rotation.y += 0.002;
     
         renderer.render(scene, camera);
     }
