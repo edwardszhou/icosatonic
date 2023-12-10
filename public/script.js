@@ -184,6 +184,9 @@ sampler.connect(reverb);
 
 let planes = new Array(15);
 let userPlane;
+let selectedPlane;
+let planeLocked = false;
+let rotationLocked = false;
 
 window.onload = () => {
 
@@ -234,6 +237,7 @@ window.onload = () => {
 
     window.addEventListener('resize', resizeScene);
     window.addEventListener('mousemove', updateUserPlane);
+    window.addEventListener('keydown', lockUnlockPlane);
 
     function animate() {
         requestAnimationFrame(animate);
@@ -242,16 +246,27 @@ window.onload = () => {
         icoWireMaterial.resolution.set( window.innerWidth, window.innerHeight ); // resolution of the viewport
         userPlane.lineMaterial.resolution.set( window.innerWidth, window.innerHeight );
         
-        for(let plane of planes) {
-            plane.lineMaterial.resolution.set( window.innerWidth, window.innerHeight );
+        updateSelectedPlane()
 
-            rotateMesh(plane.mesh, 0.001, 0.002, 0.0005);
-            rotateMesh(plane.wireframe, 0.001, 0.002, 0.0005);
+        for(let i = 0; i < planes.length; i++) {
+            let plane = planes[i];
+            plane.lineMaterial.resolution.set( window.innerWidth, window.innerHeight );
+            if(!rotationLocked) {
+                rotateMesh(plane.mesh, 0.001, 0.002, 0.0005);
+                rotateMesh(plane.wireframe, 0.001, 0.002, 0.0005);
+            }
+            if(i == selectedPlane) {
+                plane.lineMaterial.opacity = 1;
+            } else {
+                plane.lineMaterial.opacity = 0;
+            }
 
             plane.normal = getNormals(plane.geometry, plane.mesh);
-            // console.log(planes.indexOf(plane) ,plane.normal);
         }
-        rotateMesh(icoWireframe, 0.001, 0.002, 0.0005);
+
+        if(!rotationLocked) {
+            rotateMesh(icoWireframe, 0.001, 0.002, 0.0005);
+        }
         // rotateMesh(edgesMesh, 0.001, 0.002, 0.0005);
     
         renderer.render(scene, camera);
@@ -433,14 +448,56 @@ window.onload = () => {
     }
     
     function updateUserPlane(ev) {
+        if(planeLocked) return;
+
         let newRotation = [ -1 * (ev.clientX / window.innerWidth - 0.5) * Math.PI, (ev.clientY / window.innerHeight - 0.5) * Math.PI];
+
+        let magnitude = Math.sqrt(Math.pow(newRotation[0], 2) + Math.pow(newRotation[1], 2))
+        if(magnitude > Math.PI / 2) {
+            newRotation[0] = newRotation[0] / magnitude * Math.PI / 2;
+            newRotation[1] = newRotation[1] / magnitude * Math.PI / 2;
+        }
 
         userPlane.mesh.rotation.z = newRotation[0];
         userPlane.mesh.rotation.x = newRotation[1];
         userPlane.wireframe.rotation.z = newRotation[0];
         userPlane.wireframe.rotation.x = newRotation[1];
 
-        console.log(getNormals(userPlane.geometry, userPlane.mesh));
+        userPlane.normal = getNormals(userPlane.geometry, userPlane.mesh);
+    }
+    
+    function updateSelectedPlane() {
+        let closestPlaneIndex, closestLength;
+
+        for(let i = 0; i < planes.length; i++) {
+            let plane = planes[i];
+            let normal1 = (new THREE.Vector3()).copy(userPlane.normal);
+            let normal2 = (new THREE.Vector3()).copy(userPlane.normal);
+            normal1.sub(plane.normal.multiplyScalar(-1));
+            normal2.sub(plane.normal.multiplyScalar(-1));
+            
+            let closestNormal = Math.min(normal1.lengthSq(), normal2.lengthSq())
+            
+            if(!closestPlaneIndex || closestNormal < closestLength) {
+                closestPlaneIndex = i;
+                closestLength = closestNormal;
+            }
+        }
+
+        selectedPlane = closestPlaneIndex;
+    }
+
+    function startPlaneBow(planeNum) {
+        
+    }
+
+    function endPlaneBow(planeNum) {
+        
+    }
+
+    function lockUnlockRotation(ev) {
+        if(ev.key === " ")
+            rotationLocked = !rotationLocked;
     }
 }   
 
