@@ -230,14 +230,23 @@ window.onload = () => {
 
     Tone.loaded().then(()=> {
         Tone.Transport.start();
-        initAllSounds();
+        initAllSounds(chords);
     })
 
     animate();
 
     window.addEventListener('resize', resizeScene);
     window.addEventListener('mousemove', updateUserPlane);
-    window.addEventListener('keydown', lockUnlockPlane);
+    window.addEventListener('keydown', lockUnlockRotation);
+    window.addEventListener('mousedown', ()=> {
+        planeLocked = true;
+        console.log(selectedPlane);
+        startPlaneBow(selectedPlane, chords);
+    });
+    window.addEventListener('mouseup', ()=> {
+        planeLocked = false;
+        endPlaneBow(selectedPlane, chords);
+    });
 
     function animate() {
         requestAnimationFrame(animate);
@@ -412,29 +421,29 @@ window.onload = () => {
         renderer.setSize( window.innerWidth, window.innerHeight );
     }
 
-    function initAllSounds() {
-        for(let i = 1; i <= 15; i++) {
-
-            let button = document.getElementById(`plane${i}`);
+    function initAllSounds(chordSet) {
+        for(let i = 0; i < 15; i++) {
 
             let newLoop = new Tone.Loop((time)=> {
-                sampler.triggerAttack(chords[i-1].pitches);
+                sampler.triggerAttack(chordSet[i].pitches);
             }, 1);
 
-            button.addEventListener('click', ()=> {
-                let now = Tone.now();
-                if(newLoop.state === "stopped") {
-                    newLoop.start(now);
-                    showPlane(i, 0.25);
-                    sampler.triggerAttack(chords[i-1].pitches);
+            chordSet[i].loop = newLoop;
+
+            // button.addEventListener('click', ()=> {
+            //     let now = Tone.now();
+            //     if(newLoop.state === "stopped") {
+            //         newLoop.start(now);
+            //         showPlane(i, 0.25);
+            //         sampler.triggerAttack(chordSet[i-1].pitches);
                     
-                } else {
-                    newLoop.stop(now);
-                    hidePlane(i, 0.25);
-                    sampler.triggerRelease(chords[i-1].pitches);
-                }
+            //     } else {
+            //         newLoop.stop(now);
+            //         hidePlane(i, 0.25);
+            //         sampler.triggerRelease(chordSet[i-1].pitches);
+            //     }
             
-            })
+            // })
         }
     }
 
@@ -487,12 +496,18 @@ window.onload = () => {
         selectedPlane = closestPlaneIndex;
     }
 
-    function startPlaneBow(planeNum) {
-        
+    function startPlaneBow(planeNum, chordSet) {
+        let now = Tone.now();
+        chordSet[planeNum].loop.start(now);
+        showPlane(planeNum, 0.25);
+        sampler.triggerAttack(chordSet[planeNum].pitches);
     }
 
-    function endPlaneBow(planeNum) {
-        
+    function endPlaneBow(planeNum, chordSet) {
+        let now = Tone.now();
+        chordSet[planeNum].loop.stop(now);
+        hidePlane(planeNum, 0.25);
+        sampler.triggerRelease(chordSet[planeNum].pitches);
     }
 
     function lockUnlockRotation(ev) {
@@ -503,4 +518,19 @@ window.onload = () => {
 
 function getRandomColor() {
     return `hsl(${ Math.floor(Math.random() * 361) }, 100%, 70%)`;
+}
+
+class MusicalPlane {
+    constructor() {
+        this.mesh = planeMesh;
+        this.wireframe = planeWireframe; 
+        this.geometry = planeGeometry;
+        this.lineMaterial = lineMaterial;
+        this.fillMaterial = fillMaterial;
+        this.color = materialColor;
+        this.processes = null;
+        this.normal = getNormals(planeGeometry, planeMesh);
+    }
+
+    
 }
