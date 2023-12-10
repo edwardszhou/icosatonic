@@ -233,8 +233,7 @@ window.onload = () => {
     animate();
 
     window.addEventListener('resize', resizeScene);
-
-    // window.addEventListener('mousemove', )
+    window.addEventListener('mousemove', updateUserPlane);
 
     function animate() {
         requestAnimationFrame(animate);
@@ -312,7 +311,6 @@ window.onload = () => {
             userPlane = newPlane;
             fillMaterial.opacity = 0.5;
             lineMaterial.opacity = 1;
-            console.log(newPlane.normal);
         } else {
             planes[planeNum] = newPlane;
         }
@@ -432,6 +430,17 @@ window.onload = () => {
         }
     
         initPlane(userPlaneIndices, -1);
+    }
+    
+    function updateUserPlane(ev) {
+        let newRotation = [ -1 * (ev.clientX / window.innerWidth - 0.5) * Math.PI, (ev.clientY / window.innerHeight - 0.5) * Math.PI];
+
+        userPlane.mesh.rotation.z = newRotation[0];
+        userPlane.mesh.rotation.x = newRotation[1];
+        userPlane.wireframe.rotation.z = newRotation[0];
+        userPlane.wireframe.rotation.x = newRotation[1];
+
+        console.log(getNormals(userPlane.geometry, userPlane.mesh));
     }
 }   
 
