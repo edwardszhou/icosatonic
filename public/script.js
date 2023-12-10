@@ -4,6 +4,7 @@ import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { Wireframe } from 'three/addons/lines/Wireframe.js';
 import { WireframeGeometry2 } from 'three/addons/lines/WireframeGeometry2.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { VertexNormalsHelper } from 'three/addons/helpers/VertexNormalsHelper.js';
 
 const scale = {
     C3: 130.81,
@@ -133,7 +134,7 @@ sampler.volume.value = -20;
 sampler.connect(vibrato);
 sampler.connect(reverb);
 
-let planes = [];
+let planes = new Array(15);
 
 window.onload = () => {
 
@@ -169,7 +170,7 @@ window.onload = () => {
     const planeIndices = [
         0, 11, 8,   3, 8, 11,    // PLANE 1
         0, 1, 3,    0, 3, 2,     // PLANE 2
-        1, 2, 9,    10, 1, 2,    // PLANE 3
+        1, 2, 9,    10, 2, 1,    // PLANE 3
         4, 9, 7,    7, 10, 4,    // PLANE 4
         4, 11, 7,   7, 8, 4,     // PLANE 5
 
@@ -182,10 +183,10 @@ window.onload = () => {
         0, 10, 3,   3, 9, 0,     // PLANE 11
         2, 4, 1,    1, 7, 2,     // PLANE 12
 
-        10, 11, 8,  8, 9, 11,    // PLANE 13
+        10, 11, 8,  9, 8, 11,    // PLANE 13
         10, 6, 9,   9, 5, 10,    // PLANE 14
 
-        8, 6, 5,    5, 11, 6,    // PLANE 15
+        8, 6, 5,    5, 6, 11,    // PLANE 15
     ]
 
     // Main ico
@@ -210,7 +211,7 @@ window.onload = () => {
 
     for(let i = 0; i < 15; i++) {
         let indices = planeIndices.slice(6 * i, 6 * (i + 1));
-        initializePlane(indices);
+        initializePlane(indices, i);
     }
 
     camera.position.set(0, 1, 5);
@@ -257,30 +258,35 @@ window.onload = () => {
         controls.update();
         icoWireMaterial.resolution.set( window.innerWidth, window.innerHeight ); // resolution of the viewport
 
-        for(let plane of planes) {
-            plane.lineMaterial.resolution.set( window.innerWidth, window.innerHeight );
+            for(let plane of planes) {
+                plane.lineMaterial.resolution.set( window.innerWidth, window.innerHeight );
 
-            plane.mesh.rotation.y += 0.002;
-            plane.mesh.rotation.x += 0.001;
-            plane.mesh.rotation.z += 0.0005;
+                plane.mesh.rotation.y += 0.002;
 
-            plane.wireframe.rotation.y += 0.002;
-            plane.wireframe.rotation.x += 0.001;
-            plane.wireframe.rotation.z += 0.0005;
-        }
-        icoWireframe.rotation.y += 0.002;
-        edgesMesh.rotation.y += 0.002;
+                // plane.mesh.rotation.x += 0.001;
+                // plane.mesh.rotation.z += 0.0005;
 
-        icoWireframe.rotation.x += 0.001;
-        edgesMesh.rotation.x += 0.001;
+                plane.wireframe.rotation.y += 0.002;
 
-        icoWireframe.rotation.z += 0.0005;
-        edgesMesh.rotation.z += 0.0005;
+                // plane.wireframe.rotation.x += 0.001;
+                // plane.wireframe.rotation.z += 0.0005;
+
+                plane.normal = getNormals(plane.geometry, plane.mesh);
+                console.log(planes.indexOf(plane) ,plane.normal);
+            }
+            icoWireframe.rotation.y += 0.002;
+            edgesMesh.rotation.y += 0.002;
+
+            // icoWireframe.rotation.x += 0.001;
+            // edgesMesh.rotation.x += 0.001;
+
+            // icoWireframe.rotation.z += 0.0005;
+            // edgesMesh.rotation.z += 0.0005;
     
         renderer.render(scene, camera);
     }
 
-    function initializePlane(indices) {
+    function initializePlane(indices, planeNum) {
         let planeGeometry = new THREE.BufferGeometry();
         planeGeometry.setIndex(indices);
         planeGeometry.setAttribute('position', new THREE.BufferAttribute( icoVertices , 3 ));
@@ -312,10 +318,38 @@ window.onload = () => {
         let planeWireframe = new Wireframe(planeWireGeometry, lineMaterial);
         let planeMesh = new THREE.Mesh(planeGeometry, fillMaterial)
         
+        // if(planeNum == 0) {
+        //     planeGeometry.computeVertexNormals();
+        //     const helper = new VertexNormalsHelper( planeMesh, 1, materialColor );
+
+        //     const tri = new THREE.Triangle(); // for re-use
+        //     const indices = new THREE.Vector3(); // for re-use
+        //     const outNormal = new THREE.Vector3(); // this is the output normal you need
+
+        //     indices.fromArray(planeGeometry.index.array, 1 * 3);
+        //     tri.setFromAttributeAndIndices(planeGeometry.attributes.position,
+        //         indices.x,
+        //         indices.y,
+        //         indices.z);
+        //     tri.getNormal(outNormal);
+
+        //     console.log(outNormal);
+        //     fillMaterial.opacity = 1;
+        // }
+
         scene.add(planeMesh);
         scene.add(planeWireframe);
         
-        planes.push({mesh: planeMesh, wireframe: planeWireframe, lineMaterial: lineMaterial, fillMaterial: fillMaterial, color: materialColor});
+        planes[planeNum] = {
+            mesh: planeMesh,
+            wireframe: planeWireframe, 
+            geometry: planeGeometry, 
+            lineMaterial: lineMaterial, 
+            fillMaterial: fillMaterial, 
+            color: materialColor, 
+            processes: null,
+            normal: getNormals(planeGeometry, planeMesh),
+        };
     }
 
     function showPlane(planeNum, time = 0.25) {
@@ -324,12 +358,16 @@ window.onload = () => {
         let lineIncrement = 1 / 60 / time;
         let fillIncrement = 1 / 180 / time;
 
-        let showInterval = setInterval(()=> {
+        if(plane.processes) {
+            clearInterval(plane.processes);
+        }
+
+        plane.processes = setInterval(()=> {
 
             if(plane.lineMaterial.opacity + lineIncrement >= 1) {
                 plane.lineMaterial.opacity = 1;
                 plane.fillMaterial.opacity += fillIncrement;
-                clearInterval(showInterval);
+                clearInterval(plane.processes);
                 return;
             }
 
@@ -345,12 +383,16 @@ window.onload = () => {
         let lineDecrement = 1 / 60 / time;
         let fillDecrement = 1 / 180 / time;
 
-        let showInterval = setInterval(()=> {
+        if(plane.processes) {
+            clearInterval(plane.processes);
+        }
+
+        plane.processes = setInterval(()=> {
 
             if(plane.lineMaterial.opacity - lineDecrement <= 0) {
                 plane.lineMaterial.opacity = 0;
                 plane.fillMaterial.opacity -= fillDecrement;
-                clearInterval(showInterval);
+                clearInterval(plane.processes);
                 return;
             }
 
@@ -360,6 +402,23 @@ window.onload = () => {
         }, 1000/60);
     }
     
+    function getNormals(geometry, mesh) {
+        const tri = new THREE.Triangle(); // for re-use
+        const indices = new THREE.Vector3(); // for re-use
+        const outNormal = new THREE.Vector3(); // this is the output normal you need
+
+        indices.fromArray(geometry.index.array, 0);
+        tri.setFromAttributeAndIndices(geometry.attributes.position,
+            indices.x,
+            indices.y,
+            indices.z);
+        tri.getNormal(outNormal);
+
+        outNormal.applyAxisAngle(new THREE.Vector3(1,0,0), mesh.rotation.x)
+        outNormal.applyAxisAngle(new THREE.Vector3(0,1,0), mesh.rotation.y)
+        outNormal.applyAxisAngle(new THREE.Vector3(0,0,1), mesh.rotation.z)
+        return(outNormal);
+    }
 }   
 
 function getRandomColor() {
