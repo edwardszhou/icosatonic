@@ -173,6 +173,7 @@ let clients = {};
 let socket;
 let frameNumber = 0;
 let recording = new Array(600);
+let isRecording = false;
 // let userNormalLine;
 // let selectedNormalLine;
 
@@ -212,7 +213,7 @@ window.onload = () => {
     document.body.appendChild(renderer.domElement)
 
     thisUser = new UserSampler(getRandomColor(), -1);
-    icosatone = new Icosatone(0);
+    icosatone = new Icosatone();
 
     initUserPlane();
     initUI();
@@ -227,7 +228,13 @@ window.onload = () => {
 
     window.addEventListener('resize', resizeScene);
     window.addEventListener('mousemove', updateUserPlane);
-    // window.addEventListener('keydown', lockUnlockRotation);
+    window.addEventListener('keydown', (ev)=> {
+        if(ev.key === " ") {
+            isRecording = true;
+            frameNumber = 0;
+            recording = new Array(600);
+        }
+    });
     window.addEventListener('mousedown', (ev)=> {
         if(ev.button > 1) return;
 
@@ -256,6 +263,23 @@ window.onload = () => {
     function animate() {
         requestAnimationFrame(animate);
         controls.update();
+        if(isRecording) {
+            frameNumber++;
+            if(frameNumber == 600) {
+                isRecording = false;
+
+                for(let i = 599; i >= 0; i--) {
+                    if(recording[i] && recording[i].bow == true) {
+                        delete recording[i];
+                        break;
+                    } else if(recording[i]) {
+                        break;
+                    }
+                }
+                console.log(recording);
+            }
+        }
+        
 
         userPlane.lineMaterial.resolution.set( window.innerWidth, window.innerHeight );
         
@@ -562,8 +586,7 @@ class MusicalPlane {
 }
 
 class Icosatone {
-    constructor(uid) {
-        this.uid = uid;
+    constructor() {
         this.planes = new Array(15);
         this.selectedPlane = null;
         
@@ -654,11 +677,17 @@ class Icosatone {
     bow(planeNum, user) {
         this.planeLocked = true;
         this.planes[planeNum].bow(user);
+        if(recording) {
+            recording[frameNumber] = {bow: true, plane: planeNum, uid: user.id + '_instance'};
+        }
     }
 
     unbow(planeNum, user) {
         this.planeLocked = false;
         this.planes[planeNum].unbow(user);
+        if(recording) {
+            recording[frameNumber] = {bow: false, plane: planeNum, uid: user.id + '_instance'};
+        }
     }
 }
 
