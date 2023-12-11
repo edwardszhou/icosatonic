@@ -168,6 +168,7 @@ const userPlaneIndices = [
 let icosatone;
 let userPlane;
 let thisUser;
+let clients = {};
 
 let socket;
 initSocket();
@@ -211,12 +212,13 @@ window.onload = () => {
 
     thisUser = new UserSampler(getRandomColor(), -1);
     icosatone = new Icosatone(0);
+
     initUserPlane();
+    socket.emit('new-user', thisUser.color);
 
     Tone.loaded().then(()=> {
         Tone.Transport.start();
-        thisUser.initSampler();
-    })
+    });
 
     animate();
 
@@ -225,12 +227,15 @@ window.onload = () => {
     // window.addEventListener('keydown', lockUnlockRotation);
     window.addEventListener('mousedown', (ev)=> {
         if(ev.button > 1) return;
+
         icosatone.bow(icosatone.selectedPlane, thisUser);
+        socket.emit('bow', icosatone.selectedPlane);
     });
     window.addEventListener('mouseup', (ev)=> {
         if(ev.button > 1) return;
 
         icosatone.unbow(icosatone.selectedPlane, thisUser);
+        socket.emit('unbow', icosatone.selectedPlane);
     });
 
     function animate() {
@@ -323,9 +328,23 @@ window.onload = () => {
 function initSocket() {
     socket = io.connect();
 
+    socket.on('new-user', (data) => {
+        clients[data.sid] = new UserSampler(data.color, data.sid) ;
+        console.log(clients);
+    });
+
     socket.on('bow', (data) => {
-        
-    })
+        icosatone.bow(data.planeNum, clients[data.sid]);
+    });
+
+    socket.on('unbow', (data) => {
+        icosatone.unbow(data.planeNum, clients[data.sid]);
+    });
+
+    socket.on('user-disconnect', (data) => {
+        delete clients[data];
+        console.log(clients);
+    });
 }
 function getRandomColor() {
     let num = Math.floor(Math.random() * 361);
@@ -597,6 +616,7 @@ class UserSampler {
         this.soundTimeout = null;
         this.id = id;
 
+        this.initSampler();
     }
 
     initSampler() {
