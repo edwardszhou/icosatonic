@@ -4,7 +4,11 @@ import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { Wireframe } from 'three/addons/lines/Wireframe.js';
 import { WireframeGeometry2 } from 'three/addons/lines/WireframeGeometry2.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { VertexNormalsHelper } from 'three/addons/helpers/VertexNormalsHelper.js';
+
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 const scale = {
     C3: 130.81,
@@ -163,23 +167,42 @@ const userPlaneIndices = [
 
 let icosatone;
 let userPlane;
+let userColor = getRandomColor();
 
-let userNormalLine;
-let selectedNormalLine;
+
+// let userNormalLine;
+// let selectedNormalLine;
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+const renderer = new THREE.WebGLRenderer();
 const controls = new OrbitControls( camera, renderer.domElement );
 
-camera.position.set(0, 1, 5);
+camera.position.set(0, 1, 6);
 camera.lookAt(0, 0, 0);
+
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(window.devicePixelRatio);
+const renderPass = new RenderPass(scene, camera);
+const composer = new EffectComposer(renderer);
+composer.addPass(renderPass);
+
+const bloomPass = new UnrealBloomPass( new THREE.Vector2( window.innerWidth, window.innerHeight ), 1, 1.2, 0.28);
+composer.addPass(bloomPass);
+
+const outputPass = new OutputPass();
+composer.addPass(outputPass);
+
 
 controls.update();
 controls.enableDamping = true; // an animation loop is required when either damping or auto-rotation are enabled
-controls.dampingFactor = 0.05;
-
-renderer.setSize(window.innerWidth, window.innerHeight);
+controls.dampingFactor = 0.02;
+controls.enablePan = false;
+controls.enableZoom = false;
+controls.rotateSpeed = 0.25;
+controls.mouseButtons = {
+    RIGHT: THREE.MOUSE.ROTATE
+}
 
 window.onload = () => {
 
@@ -197,11 +220,15 @@ window.onload = () => {
 
     window.addEventListener('resize', resizeScene);
     window.addEventListener('mousemove', updateUserPlane);
-    window.addEventListener('keydown', lockUnlockRotation);
-    window.addEventListener('mousedown', ()=> {
-        icosatone.bow(icosatone.selectedPlane, icosatone.sampler);
+    // window.addEventListener('keydown', lockUnlockRotation);
+    window.addEventListener('mousedown', (ev)=> {
+        if(ev.button > 1) return;
+        icosatone.bow(icosatone.selectedPlane);
+        console.log(icosatone.selectedPlane)
     });
-    window.addEventListener('mouseup', ()=> {
+    window.addEventListener('mouseup', (ev)=> {
+        if(ev.button > 1) return;
+
         icosatone.unbow(icosatone.selectedPlane);
     });
 
@@ -214,7 +241,8 @@ window.onload = () => {
         icosatone.selectPlane(userPlane.normal.toArray());
         icosatone.update();
 
-        renderer.render(scene, camera);
+        // renderer.render(scene, camera);
+        composer.render();
     }
 
     function resizeScene() {
@@ -228,7 +256,7 @@ window.onload = () => {
         let planeGeometry = new THREE.BufferGeometry();
         planeGeometry.setIndex(userPlaneIndices);
         planeGeometry.setAttribute('position', new THREE.BufferAttribute(userPlaneVertices, 3));
-        let materialColor = getRandomColor();
+        let materialColor = userColor;
         let fillMaterial = new THREE.MeshBasicMaterial( {
             color: materialColor, 
             side: THREE.DoubleSide, 
@@ -254,8 +282,8 @@ window.onload = () => {
         let planeWireframe = new Wireframe(planeWireGeometry, lineMaterial);
         let planeMesh = new THREE.Mesh(planeGeometry, fillMaterial)
 
-        scene.add(planeMesh);
-        scene.add(planeWireframe);
+        // scene.add(planeMesh);
+        // scene.add(planeWireframe);
         
         userPlane = {
             mesh: planeMesh,
@@ -288,8 +316,6 @@ window.onload = () => {
         userPlane.wireframe.rotation.x = newRotation[1];
 
         userPlane.normal = getNormals(userPlane.geometry, userPlane.mesh);
-
-
     }
 
     function lockUnlockRotation(ev) {
@@ -312,7 +338,11 @@ window.onload = () => {
 }   
 
 function getRandomColor() {
-    return `hsl(${ Math.floor(Math.random() * 361) }, 100%, 70%)`;
+    let num = Math.floor(Math.random() * 361);
+    while(num < 260 && num > 225) {
+        num = Math.floor(Math.random() * 361)
+    }
+    return `hsl(${num}, 100%, 70%)`;
 }
 
 function getNormals(geometry, mesh) {
@@ -345,7 +375,6 @@ class MusicalPlane {
         this.geometry = new THREE.BufferGeometry();
 
         let vertices = planeIndices.slice(6 * number, 6 * (number + 1)); // for UL/UR/LL/LR = B/C/A/D plane, indices for faces in pattern CBA ADC
-        console.log(vertices);
         let thisPlaneVertices = new Float32Array([
             ...icoVertices.slice(vertices[0] * 3, vertices[0] * 3 +3),
             ...icoVertices.slice(vertices[1] * 3, vertices[1] * 3 +3),
@@ -353,7 +382,6 @@ class MusicalPlane {
             ...icoVertices.slice(vertices[4] * 3, vertices[4] * 3 +3)
         ]); // get CBA and D
 
-        console.log(thisPlaneVertices);
         this.geometry.setIndex(planePattern);
         this.geometry.setAttribute('position', new THREE.BufferAttribute( thisPlaneVertices , 3 ));
 
@@ -391,6 +419,7 @@ class MusicalPlane {
 
         this.chord = [];
         this.soundLoop = null;
+        this.soundTimeout = null;
     }
 
     initChord(pitches, sampler) {
@@ -442,17 +471,21 @@ class MusicalPlane {
     }
 
     bow(sampler) {
+        clearTimeout(this.soundTimeout);
         let now = Tone.now();
         this.soundLoop.start(now);
         this.show();
         sampler.triggerAttack(this.chord);
+        this.soundTimeout = setTimeout(()=>{sampler.triggerAttack(this.chord)}, 250);
     }
 
     unbow(sampler) {
+        clearTimeout(this.soundTimeout);
         let now = Tone.now();
         this.soundLoop.stop(now);
         this.hide();
         sampler.triggerRelease(this.chord);
+        this.soundTimeout = setTimeout(()=>{sampler.triggerRelease(this.chord)}, 250);
     }
 
 }
@@ -475,7 +508,7 @@ class Icosatone {
         geometry.setAttribute('position', new THREE.BufferAttribute( icoVertices , 3 ));
 
         let wireGeometry = new WireframeGeometry2( geometry );
-        this.lineMaterial = new LineMaterial( {color: 0xffffff, linewidth: 2, depthTest: false} );
+        this.lineMaterial = new LineMaterial( {color: 0x8F8F8F, linewidth: 2, depthTest: false} );
 
         this.wireframe = new Wireframe(wireGeometry, this.lineMaterial);
         scene.add( this.wireframe );
@@ -503,7 +536,7 @@ class Icosatone {
 
     initPlanes() {
         for(let i = 0; i < 15; i++) {
-            this.planes[i] = new MusicalPlane(i, getRandomColor())
+            this.planes[i] = new MusicalPlane(i, userColor)
         }
     }
 
@@ -580,7 +613,7 @@ class Icosatone {
         this.planes[planeNum].bow(this.sampler);
     }
 
-    unbow(planeNum, sampler) {
+    unbow(planeNum) {
         this.planeLocked = false;
         this.planes[planeNum].unbow(this.sampler);
     }
