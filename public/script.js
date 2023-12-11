@@ -167,9 +167,10 @@ const userPlaneIndices = [
 
 let icosatone;
 let userPlane;
-let userColor = getRandomColor();
+let thisUser;
 
-
+let socket;
+initSocket();
 // let userNormalLine;
 // let selectedNormalLine;
 
@@ -208,12 +209,13 @@ window.onload = () => {
 
     document.body.appendChild(renderer.domElement)
 
+    thisUser = new UserSampler(getRandomColor(), -1);
     icosatone = new Icosatone(0);
     initUserPlane();
 
     Tone.loaded().then(()=> {
         Tone.Transport.start();
-        icosatone.initChords();
+        thisUser.initSampler();
     })
 
     animate();
@@ -223,13 +225,12 @@ window.onload = () => {
     // window.addEventListener('keydown', lockUnlockRotation);
     window.addEventListener('mousedown', (ev)=> {
         if(ev.button > 1) return;
-        icosatone.bow(icosatone.selectedPlane);
-        console.log(icosatone.selectedPlane)
+        icosatone.bow(icosatone.selectedPlane, thisUser);
     });
     window.addEventListener('mouseup', (ev)=> {
         if(ev.button > 1) return;
 
-        icosatone.unbow(icosatone.selectedPlane);
+        icosatone.unbow(icosatone.selectedPlane, thisUser);
     });
 
     function animate() {
@@ -256,7 +257,7 @@ window.onload = () => {
         let planeGeometry = new THREE.BufferGeometry();
         planeGeometry.setIndex(userPlaneIndices);
         planeGeometry.setAttribute('position', new THREE.BufferAttribute(userPlaneVertices, 3));
-        let materialColor = userColor;
+        let materialColor = thisUser.color;
         let fillMaterial = new THREE.MeshBasicMaterial( {
             color: materialColor, 
             side: THREE.DoubleSide, 
@@ -318,25 +319,14 @@ window.onload = () => {
         userPlane.normal = getNormals(userPlane.geometry, userPlane.mesh);
     }
 
-    function lockUnlockRotation(ev) {
-        if(ev.key === " ")
-            icosatone.rotationLocked = !icosatone.rotationLocked;
-        if(ev.key === "`") {
-            if(userNormalLine) scene.remove(userNormalLine);
-            if(selectedNormalLine) scene.remove(selectedNormalLine);
-
-            let points = [userPlane.normal, new THREE.Vector3(0, 0, 0)]
-            let geometry = new THREE.BufferGeometry().setFromPoints(points);
-            userNormalLine = new THREE.Line(geometry, new THREE.LineBasicMaterial());
-            scene.add(userNormalLine);
-            points = [icosatone.planes[icosatone.selectedPlane].normal, new THREE.Vector3(0, 0, 0)];
-            geometry = new THREE.BufferGeometry().setFromPoints(points);
-            selectedNormalLine = new THREE.Line(geometry, new THREE.LineBasicMaterial());
-            scene.add(selectedNormalLine)
-        }
-    }
 }   
+function initSocket() {
+    socket = io.connect();
 
+    socket.on('bow', (data) => {
+        
+    })
+}
 function getRandomColor() {
     let num = Math.floor(Math.random() * 361);
     while(num < 260 && num > 225) {
@@ -417,16 +407,7 @@ class MusicalPlane {
         this.selected = false;
         this.normal = getNormals(this.geometry, this.mesh);
 
-        this.chord = [];
-        this.soundLoop = null;
-        this.soundTimeout = null;
-    }
-
-    initChord(pitches, sampler) {
-        this.soundLoop = new Tone.Loop((time)=> {
-            sampler.triggerAttack(pitches);
-        }, 1);
-        this.chord = pitches;
+        this.players = [];
     }
 
     show(time = 0.25) {
@@ -457,6 +438,8 @@ class MusicalPlane {
             } else if(this.trueOpacity + increment <= 0) {
                 this.trueOpacity = 0;
                 this.process = null;
+                this.lineMaterial.color.set(thisUser.color);
+                this.fillMaterial.color.set(thisUser.color);
             } else {
                 this.trueOpacity += increment;
             }
@@ -470,22 +453,35 @@ class MusicalPlane {
         this.fillMaterial.opacity = this.trueOpacity / 3;
     }
 
-    bow(sampler) {
-        clearTimeout(this.soundTimeout);
-        let now = Tone.now();
-        this.soundLoop.start(now);
-        this.show();
-        sampler.triggerAttack(this.chord);
-        this.soundTimeout = setTimeout(()=>{sampler.triggerAttack(this.chord)}, 250);
+    bow(user) {
+        user.play(this.number);
+
+        this.players.push(user);
+        this.lineMaterial.color.set(user.color);
+        this.fillMaterial.color.set(user.color);
+
+        if(this.players.length == 1) this.show();
     }
 
-    unbow(sampler) {
-        clearTimeout(this.soundTimeout);
-        let now = Tone.now();
-        this.soundLoop.stop(now);
-        this.hide();
-        sampler.triggerRelease(this.chord);
-        this.soundTimeout = setTimeout(()=>{sampler.triggerRelease(this.chord)}, 250);
+    unbow(user) {
+
+        user.stop(this.number);
+
+        if(this.players[this.players.length-1] == user) {
+            this.players.pop();
+            if(this.players.length > 0) {
+                let newColor = this.players[this.players.length-1].color;
+                this.lineMaterial.color.set(newColor);
+                this.fillMaterial.color.set(newColor);
+            }
+        } else {
+            let index = this.players.indexOf(user);
+            this.players.splice(index, 1);
+        }
+
+        if(this.players.length == 0) {
+            this.hide();
+        }
     }
 
 }
@@ -499,10 +495,6 @@ class Icosatone {
         this.rotationLocked = false;
         this.planeLocked = false;
 
-        this.sampler = new Tone.Sampler({
-            "A3": "samples/A3.mp3",
-        }).toDestination();
-
         let geometry = new THREE.BufferGeometry();
         geometry.setIndex(icoIndices);
         geometry.setAttribute('position', new THREE.BufferAttribute( icoVertices , 3 ));
@@ -514,35 +506,11 @@ class Icosatone {
         scene.add( this.wireframe );
 
         this.initPlanes();
-        this.initSampler();
-    }
-
-    initSampler() {
-        const vibrato = new Tone.Vibrato({
-            maxDelay : 0.005 ,
-            frequency : 1 ,
-            depth : 0.2
-        }).toDestination();
-            
-        const reverb = new Tone.Reverb({
-            decay: 5
-        }).toDestination();
-        
-        this.sampler.release = 0.6;
-        this.sampler.volume.value = -20;
-        this.sampler.connect(vibrato);
-        this.sampler.connect(reverb);
     }
 
     initPlanes() {
         for(let i = 0; i < 15; i++) {
-            this.planes[i] = new MusicalPlane(i, userColor)
-        }
-    }
-
-    initChords() {
-        for(let i = 0; i < 15; i++) {
-            this.planes[i].initChord(chords[i].pitches, this.sampler);
+            this.planes[i] = new MusicalPlane(i, thisUser.color)
         }
     }
     
@@ -608,13 +576,65 @@ class Icosatone {
         // console.log(closestPlane, greatestSimilarity);
     }
 
-    bow(planeNum) {
+    bow(planeNum, user) {
         this.planeLocked = true;
-        this.planes[planeNum].bow(this.sampler);
+        this.planes[planeNum].bow(user);
     }
 
-    unbow(planeNum) {
+    unbow(planeNum, user) {
         this.planeLocked = false;
-        this.planes[planeNum].unbow(this.sampler);
+        this.planes[planeNum].unbow(user);
+    }
+}
+
+class UserSampler {
+    constructor(color, id) {
+        this.sampler = new Tone.Sampler({
+            "A3": "samples/A3.mp3",
+        }).toDestination();
+        this.color = color;
+        this.soundLoops = new Array(15);
+        this.soundTimeout = null;
+        this.id = id;
+
+    }
+
+    initSampler() {
+        const vibrato = new Tone.Vibrato({
+            maxDelay : 0.005 ,
+            frequency : 1 ,
+            depth : 0.2
+        }).toDestination();
+            
+        const reverb = new Tone.Reverb({
+            decay: 5
+        }).toDestination();
+        
+        this.sampler.release = 0.6;
+        this.sampler.volume.value = -20;
+        this.sampler.connect(vibrato);
+        this.sampler.connect(reverb);
+
+        for(let i = 0; i < 15; i++) {
+            this.soundLoops[i] = new Tone.Loop((time)=> {
+                this.sampler.triggerAttack(chords[i].pitches);
+            }, 1);
+        }
+    }
+
+    play(chordNum) {
+        clearTimeout(this.soundTimeout);
+        let now = Tone.now();
+        this.soundLoops[chordNum].start(now);
+        this.sampler.triggerAttack(chords[chordNum].pitches);
+        this.soundTimeout = setTimeout(()=>{this.sampler.triggerAttack(chords[chordNum].pitches)}, 250);
+    }
+
+    stop(chordNum) {
+        clearTimeout(this.soundTimeout);
+        let now = Tone.now();
+        this.soundLoops[chordNum].stop(now);
+        this.sampler.triggerRelease(chords[chordNum].pitches);
+        this.soundTimeout = setTimeout(()=>{this.sampler.triggerRelease(chords[chordNum].pitches)}, 250);
     }
 }
