@@ -171,7 +171,8 @@ let thisUser;
 let clients = {};
 
 let socket;
-initSocket();
+let frameNumber = 0;
+let recording = new Array(600);
 // let userNormalLine;
 // let selectedNormalLine;
 
@@ -214,6 +215,8 @@ window.onload = () => {
     icosatone = new Icosatone(0);
 
     initUserPlane();
+    initUI();
+    initSocket();
     socket.emit('new-user', thisUser.color);
 
     Tone.loaded().then(()=> {
@@ -228,11 +231,23 @@ window.onload = () => {
     window.addEventListener('mousedown', (ev)=> {
         if(ev.button > 1) return;
 
+        let wasSustained = userPlane.sustain;
+        if(wasSustained) {
+            userPlane.sustain = false;
+            icosatone.unbow(icosatone.selectedPlane, thisUser);
+            socket.emit('unbow', icosatone.selectedPlane);
+            return;
+        }
+        if(ev.shiftKey && !wasSustained) {
+            userPlane.sustain = true;
+        }
+        
         icosatone.bow(icosatone.selectedPlane, thisUser);
         socket.emit('bow', icosatone.selectedPlane);
+        
     });
     window.addEventListener('mouseup', (ev)=> {
-        if(ev.button > 1) return;
+        if(userPlane.sustain || ev.button > 1) return;
 
         icosatone.unbow(icosatone.selectedPlane, thisUser);
         socket.emit('unbow', icosatone.selectedPlane);
@@ -299,6 +314,7 @@ window.onload = () => {
             fillMaterial: fillMaterial, 
             color: materialColor, 
             processes: null,
+            sustain: false,
             normal: getNormals(planeGeometry, planeMesh),
         };
 
@@ -330,7 +346,6 @@ function initSocket() {
 
     socket.on('new-user', (data) => {
         clients[data.sid] = new UserSampler(data.color, data.sid) ;
-        console.log(clients);
     });
 
     socket.on('bow', (data) => {
@@ -343,8 +358,49 @@ function initSocket() {
 
     socket.on('user-disconnect', (data) => {
         delete clients[data];
-        console.log(clients);
     });
+}
+
+let infoShowing = true;
+
+function initUI() {
+    let color = thisUser.color;
+
+    let infoContent = document.getElementById('info-content')
+    let hideBtn = document.getElementById('hide-btn');
+    // hideBtn.setAttribute('showing', true);
+    hideBtn.addEventListener('mouseenter', () => {
+        hideBtn.style.color = color;
+        hideBtn.style.textShadow = `0 0 5px ${color}`
+    });
+    hideBtn.addEventListener('mouseleave', () => {
+        hideBtn.style.color = 'darkGray';
+        hideBtn.style.textShadow = 'unset';
+    });
+    hideBtn.addEventListener('click', ()=> {
+        if(infoShowing) {
+            infoContent.style.animation = 'slideOut 2s ease forwards';
+            hideBtn.textContent = '>';
+            infoShowing = false;
+        } else {
+            infoContent.style.animation = 'slideIn 2s ease forwards';
+            hideBtn.textContent = '<';
+            infoShowing = true;
+        }
+       
+    });
+
+    hideBtn.addEventListener('mousedown', (ev) => {
+        ev.stopPropagation();
+    });
+    hideBtn.addEventListener('mouseup', (ev) => {
+        ev.stopPropagation();
+    });
+
+    let infoSeparator = document.getElementById('info-separator');
+    infoSeparator.style.boxShadow = `0 0 50px 8px ${color}`;
+    infoSeparator.style.borderColor = color;
+    
 }
 function getRandomColor() {
     let num = Math.floor(Math.random() * 361);
@@ -469,7 +525,7 @@ class MusicalPlane {
         } else {
             this.lineMaterial.opacity = this.trueOpacity;
         }
-        this.fillMaterial.opacity = this.trueOpacity / 3;
+        this.fillMaterial.opacity = this.trueOpacity / 4;
     }
 
     bow(user) {
@@ -525,6 +581,7 @@ class Icosatone {
         scene.add( this.wireframe );
 
         this.initPlanes();
+        this.rotate(0, Math.random() * 2 * Math.PI, 0);
     }
 
     initPlanes() {
@@ -592,7 +649,6 @@ class Icosatone {
         }
 
         this.selectedPlane = closestPlane;
-        // console.log(closestPlane, greatestSimilarity);
     }
 
     bow(planeNum, user) {
@@ -643,7 +699,7 @@ class UserSampler {
     }
 
     play(chordNum) {
-        clearTimeout(this.soundTimeout);
+        clearInterval(this.soundTimeout);
         let now = Tone.now();
         this.soundLoops[chordNum].start(now);
         this.sampler.triggerAttack(chords[chordNum].pitches);
@@ -655,6 +711,6 @@ class UserSampler {
         let now = Tone.now();
         this.soundLoops[chordNum].stop(now);
         this.sampler.triggerRelease(chords[chordNum].pitches);
-        this.soundTimeout = setTimeout(()=>{this.sampler.triggerRelease(chords[chordNum].pitches)}, 250);
+        this.soundTimeout = setInterval(()=>{this.sampler.triggerRelease(chords[chordNum].pitches)}, 10);
     }
 }

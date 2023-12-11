@@ -5,7 +5,7 @@
     <script type="text/javascript" src="/socket.io/socket.io.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.min.js"></script>
     <link rel="stylesheet" type="text/css" href="style.css">
-    
+	<title>Icosatonic</title>
   </head>
   
   <body>
@@ -19,7 +19,20 @@
       }
     </script>
     <script type="module" src="script.js"></script>
-
-    
+	
+	<div id="info-content" state="showing">
+		<div id="heading">
+			<h1 id="title">Icosatonic</h1>
+			<span id="hide-btn"><</span> 
+		</div>
+		<hr id="info-separator">
+		<div id="instructions">
+			<p>&#9659; move mouse to select plane</p>
+			<p>selects plane closest tilted toward mouse position</p>
+			<p>&#9659; left click drag to produce sound</p>
+			<p>&#9659; shift + click to sustain sound</p>
+			<p>&#9659; right click drag to rotate view</p>
+		</div>
+	</div>
   </body>
 </html>

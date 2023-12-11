@@ -1,6 +1,42 @@
 body {
     margin: 0;
     overflow: hidden;
+    font-family:'Courier New', Courier, monospace;
+    color: white;
+}
+
+@keyframes fadeIn {
+	from { opacity: 0; }
+	to { opacity: 1; }
+}
+
+@keyframes slideOut {
+	from {
+        left: 5%;
+    }
+	to { 
+        left: -22%;
+    }
+}
+
+@keyframes slideIn {
+	from {
+        left: -22%;
+    }
+	to { 
+        left: 5%;
+    }
+}
+
+@keyframes extend {
+    from {
+        width: 0%;
+        opacity: 0;
+    }
+    to {
+        width: 30%;
+        opacity: 1;
+    }
 }
 
 #button-container {
@@ -24,6 +60,57 @@ button {
     border: solid white 1px;
     background-color: transparent;
     color: white;
-    font-family:'Courier New', Courier, monospace;
     cursor: pointer;
+}
+
+#info-content {
+    position: fixed;
+    top: 5%;
+    left: 5%;
+    width: 25%;
+    overflow: hidden;
+}
+#heading {
+    margin: 5% 0 5% 0;
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+#title {
+    opacity: 0;
+    animation: fadeIn 1s linear 0.5s forwards;
+    transition-duration: 1s;
+
+}
+
+#info-separator {
+    margin: 10% 0 10% 5%;
+    width: 0%;
+    opacity: 0;
+    animation: extend 2s ease 1.5s forwards;
+}
+#heading > * {
+    margin: 0;
+    font-size: 5vh;
+    font-weight: 50;
+}
+
+#hide-btn {
+    cursor: pointer;
+    transition-duration: 0.25s;
+    color: darkGray;
+
+    opacity: 0;
+    animation: fadeIn 1s linear 1.5s forwards;
+}
+ 
+#instructions {
+    font-size: 2vh;
+    margin-left: 10%;
+    width: 80%;
+    opacity: 0;
+
+    animation: fadeIn 1s linear 1.5s forwards;
 }
