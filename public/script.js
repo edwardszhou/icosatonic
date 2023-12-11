@@ -125,9 +125,9 @@ const icoIndices = [
 ];
 
 const planeIndices = [
-    0, 11, 8,   3, 8, 11,    // PLANE 1
-    0, 1, 3,    0, 3, 2,     // PLANE 2
-    1, 2, 9,    10, 2, 1,    // PLANE 3
+    8, 0, 11,   11, 3, 8,    // PLANE 1
+    0, 1, 3,    3, 2, 0,     // PLANE 2
+    2, 9, 1,    1, 10, 2,    // PLANE 3
     4, 9, 7,    7, 10, 4,    // PLANE 4
     4, 11, 7,   7, 8, 4,     // PLANE 5
 
@@ -140,11 +140,15 @@ const planeIndices = [
     0, 10, 3,   3, 9, 0,     // PLANE 11
     2, 4, 1,    1, 7, 2,     // PLANE 12
 
-    10, 11, 8,  9, 8, 11,    // PLANE 13
+    8, 10, 11,  11, 9, 8,    // PLANE 13
     10, 6, 9,   9, 5, 10,    // PLANE 14
 
-    8, 6, 5,    5, 6, 11,    // PLANE 15
+    5, 8, 6,    6, 11, 5,    // PLANE 15
 ];
+
+const planePattern = [
+    0, 1, 2, 2, 3, 0
+]
 
 const userPlaneVertices = new Float32Array([
     -1, 0, -1,
@@ -157,80 +161,36 @@ const userPlaneIndices = [
     0, 1, 2,    2, 3, 1
 ];
 
-let sampler = new Tone.Sampler({
-    "A3": "samples/A3.mp3",
-    // "B3": "samples/B3.mp3",
-    // "C3": "samples/C3.mp3",
-    // "D3": "samples/D3.mp3",
-    // "E3": "samples/E3.mp3",
-    // "F3": "samples/F3.mp3",
-    // "G3": "samples/G3.mp3",
-}).toDestination();
-
-const vibrato = new Tone.Vibrato({
-    maxDelay : 0.005 ,
-    frequency : 1 ,
-    depth : 0.2
-}).toDestination();
-    
-const reverb = new Tone.Reverb({
-    decay: 5
-}).toDestination();
-
-sampler.release = 0.6;
-sampler.volume.value = -20;
-sampler.connect(vibrato);
-sampler.connect(reverb);
-
-let planes = new Array(15);
+let icosatone;
 let userPlane;
-let selectedPlane;
-let planeLocked = false;
-let rotationLocked = false;
+
+let userNormalLine;
+let selectedNormalLine;
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+const controls = new OrbitControls( camera, renderer.domElement );
+
+camera.position.set(0, 1, 5);
+camera.lookAt(0, 0, 0);
+
+controls.update();
+controls.enableDamping = true; // an animation loop is required when either damping or auto-rotation are enabled
+controls.dampingFactor = 0.05;
+
+renderer.setSize(window.innerWidth, window.innerHeight);
 
 window.onload = () => {
 
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    const controls = new OrbitControls( camera, renderer.domElement );
-
-    camera.position.set(0, 1, 5);
-    camera.lookAt(0, 0, 0);
-
-    renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement)
 
-    controls.update();
-    controls.enableDamping = true; // an animation loop is required when either damping or auto-rotation are enabled
-    controls.dampingFactor = 0.05;
-
-    // Main ico 
-    const icoGeometry = new THREE.BufferGeometry();
-    icoGeometry.setIndex(icoIndices);
-    icoGeometry.setAttribute('position', new THREE.BufferAttribute( icoVertices , 3 ));
-
-    let icoWireGeometry = new WireframeGeometry2( icoGeometry );
-    let icoWireMaterial = new LineMaterial( {color: 0xffffff, linewidth: 2, depthTest: false} );
-
-    let icoWireframe = new Wireframe(icoWireGeometry, icoWireMaterial);
-    scene.add( icoWireframe );
-
-    // plane wireframes
-
-    // const edgesGeometry = new THREE.BufferGeometry();
-    // edgesGeometry.setIndex(planeIndices);
-    // edgesGeometry.setAttribute('position', new THREE.BufferAttribute( icoVertices , 3 ));
-
-    // let basicMaterial = new THREE.MeshBasicMaterial( {color: 0xff0000, side: THREE.DoubleSide, wireframe: true} );
-    // let edgesMesh = new THREE.Mesh(edgesGeometry, basicMaterial)
-    // scene.add(edgesMesh);
-
-    initAllPlanes();
+    icosatone = new Icosatone(0);
+    initUserPlane();
 
     Tone.loaded().then(()=> {
         Tone.Transport.start();
-        initAllSounds(chords);
+        icosatone.initChords();
     })
 
     animate();
@@ -239,59 +199,36 @@ window.onload = () => {
     window.addEventListener('mousemove', updateUserPlane);
     window.addEventListener('keydown', lockUnlockRotation);
     window.addEventListener('mousedown', ()=> {
-        planeLocked = true;
-        console.log(selectedPlane);
-        startPlaneBow(selectedPlane, chords);
+        icosatone.bow(icosatone.selectedPlane, icosatone.sampler);
     });
     window.addEventListener('mouseup', ()=> {
-        planeLocked = false;
-        endPlaneBow(selectedPlane, chords);
+        icosatone.unbow(icosatone.selectedPlane);
     });
 
     function animate() {
         requestAnimationFrame(animate);
         controls.update();
 
-        icoWireMaterial.resolution.set( window.innerWidth, window.innerHeight ); // resolution of the viewport
         userPlane.lineMaterial.resolution.set( window.innerWidth, window.innerHeight );
         
-        updateSelectedPlane()
+        icosatone.selectPlane(userPlane.normal.toArray());
+        icosatone.update();
 
-        for(let i = 0; i < planes.length; i++) {
-            let plane = planes[i];
-            plane.lineMaterial.resolution.set( window.innerWidth, window.innerHeight );
-            if(!rotationLocked) {
-                rotateMesh(plane.mesh, 0.001, 0.002, 0.0005);
-                rotateMesh(plane.wireframe, 0.001, 0.002, 0.0005);
-            }
-            if(i == selectedPlane) {
-                plane.lineMaterial.opacity = 1;
-            } else {
-                plane.lineMaterial.opacity = 0;
-            }
-
-            plane.normal = getNormals(plane.geometry, plane.mesh);
-        }
-
-        if(!rotationLocked) {
-            rotateMesh(icoWireframe, 0.001, 0.002, 0.0005);
-        }
-        // rotateMesh(edgesMesh, 0.001, 0.002, 0.0005);
-    
         renderer.render(scene, camera);
     }
 
-    function initPlane(indices, planeNum) {
+    function resizeScene() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+    
+        renderer.setSize( window.innerWidth, window.innerHeight );
+    }
+
+    function initUserPlane() {
         let planeGeometry = new THREE.BufferGeometry();
-        planeGeometry.setIndex(indices);
-
-        if(planeNum == -1)
-            planeGeometry.setAttribute('position', new THREE.BufferAttribute(userPlaneVertices, 3));
-        else
-            planeGeometry.setAttribute('position', new THREE.BufferAttribute( icoVertices , 3 ));
-
+        planeGeometry.setIndex(userPlaneIndices);
+        planeGeometry.setAttribute('position', new THREE.BufferAttribute(userPlaneVertices, 3));
         let materialColor = getRandomColor();
-
         let fillMaterial = new THREE.MeshBasicMaterial( {
             color: materialColor, 
             side: THREE.DoubleSide, 
@@ -302,7 +239,7 @@ window.onload = () => {
         } );
 
         fillMaterial.transparent = true;
-        fillMaterial.opacity = 0;
+        fillMaterial.opacity = 0.5;
 
         let planeWireGeometry = new WireframeGeometry2(planeGeometry);
         let lineMaterial = new LineMaterial( {
@@ -312,7 +249,7 @@ window.onload = () => {
         } );
 
         lineMaterial.transparent = true;
-        lineMaterial.opacity = 0;
+        lineMaterial.opacity = 1;
 
         let planeWireframe = new Wireframe(planeWireGeometry, lineMaterial);
         let planeMesh = new THREE.Mesh(planeGeometry, fillMaterial)
@@ -320,7 +257,7 @@ window.onload = () => {
         scene.add(planeMesh);
         scene.add(planeWireframe);
         
-        let newPlane = {
+        userPlane = {
             mesh: planeMesh,
             wireframe: planeWireframe, 
             geometry: planeGeometry, 
@@ -331,133 +268,11 @@ window.onload = () => {
             normal: getNormals(planeGeometry, planeMesh),
         };
 
-        if(planeNum == -1) {
-            userPlane = newPlane;
-            fillMaterial.opacity = 0.5;
-            lineMaterial.opacity = 1;
-        } else {
-            planes[planeNum] = newPlane;
-        }
-    }
-
-    function showPlane(planeNum, time = 0.25) {
-
-        let plane = planes[planeNum-1];
-        let lineIncrement = 1 / 60 / time;
-        let fillIncrement = 1 / 180 / time;
-
-        if(plane.processes) {
-            clearInterval(plane.processes);
-        }
-
-        plane.processes = setInterval(()=> {
-
-            if(plane.lineMaterial.opacity + lineIncrement >= 1) {
-                plane.lineMaterial.opacity = 1;
-                plane.fillMaterial.opacity += fillIncrement;
-                clearInterval(plane.processes);
-                return;
-            }
-
-            // line opacity 1 in 0.5s, with interval of 60 updates per second
-            plane.lineMaterial.opacity += lineIncrement; 
-            plane.fillMaterial.opacity += fillIncrement;
-        }, 1000/60);
-    }
-
-    function hidePlane(planeNum, time = 0.25) {
-
-        let plane = planes[planeNum-1];
-        let lineDecrement = 1 / 60 / time;
-        let fillDecrement = 1 / 180 / time;
-
-        if(plane.processes) {
-            clearInterval(plane.processes);
-        }
-
-        plane.processes = setInterval(()=> {
-
-            if(plane.lineMaterial.opacity - lineDecrement <= 0) {
-                plane.lineMaterial.opacity = 0;
-                plane.fillMaterial.opacity -= fillDecrement;
-                clearInterval(plane.processes);
-                return;
-            }
-
-            // line opacity 1 in 0.5s, with interval of 60 updates per second
-            plane.lineMaterial.opacity -= lineDecrement; 
-            plane.fillMaterial.opacity -= fillDecrement;
-        }, 1000/60);
-    }
-    
-    function getNormals(geometry, mesh) {
-        const tri = new THREE.Triangle(); // for re-use
-        const indices = new THREE.Vector3(); // for re-use
-        const outNormal = new THREE.Vector3(); // this is the output normal you need
-
-        indices.fromArray(geometry.index.array, 0);
-        tri.setFromAttributeAndIndices(geometry.attributes.position,
-            indices.x,
-            indices.y,
-            indices.z);
-        tri.getNormal(outNormal);
-
-        outNormal.applyAxisAngle(new THREE.Vector3(1,0,0), mesh.rotation.x)
-        outNormal.applyAxisAngle(new THREE.Vector3(0,1,0), mesh.rotation.y)
-        outNormal.applyAxisAngle(new THREE.Vector3(0,0,1), mesh.rotation.z)
-        return(outNormal);
-    }
-
-    function rotateMesh(mesh, x, y, z) {
-        mesh.rotation.x += x;
-        mesh.rotation.y += y;
-        mesh.rotation.z += z;
-    }
-    
-    function resizeScene() {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-    
-        renderer.setSize( window.innerWidth, window.innerHeight );
-    }
-
-    function initAllSounds(chordSet) {
-        for(let i = 0; i < 15; i++) {
-
-            let newLoop = new Tone.Loop((time)=> {
-                sampler.triggerAttack(chordSet[i].pitches);
-            }, 1);
-
-            chordSet[i].loop = newLoop;
-
-            // button.addEventListener('click', ()=> {
-            //     let now = Tone.now();
-            //     if(newLoop.state === "stopped") {
-            //         newLoop.start(now);
-            //         showPlane(i, 0.25);
-            //         sampler.triggerAttack(chordSet[i-1].pitches);
-                    
-            //     } else {
-            //         newLoop.stop(now);
-            //         hidePlane(i, 0.25);
-            //         sampler.triggerRelease(chordSet[i-1].pitches);
-            //     }
-            
-            // })
-        }
-    }
-
-    function initAllPlanes() {
-        for(let i = 0; i < 15; i++) {
-            let indices = planeIndices.slice(6 * i, 6 * (i + 1));
-            initPlane(indices, i);
-        }
-    
-        initPlane(userPlaneIndices, -1);
     }
     
     function updateUserPlane(ev) {
-        if(planeLocked) return;
+
+        if(icosatone.planeLocked) return;
 
         let newRotation = [ -1 * (ev.clientX / window.innerWidth - 0.5) * Math.PI, (ev.clientY / window.innerHeight - 0.5) * Math.PI];
 
@@ -473,46 +288,26 @@ window.onload = () => {
         userPlane.wireframe.rotation.x = newRotation[1];
 
         userPlane.normal = getNormals(userPlane.geometry, userPlane.mesh);
-    }
-    
-    function updateSelectedPlane() {
-        let closestPlaneIndex, closestLength;
 
-        for(let i = 0; i < planes.length; i++) {
-            let plane = planes[i];
-            let normal1 = (new THREE.Vector3()).copy(userPlane.normal);
-            let normal2 = (new THREE.Vector3()).copy(userPlane.normal);
-            normal1.sub(plane.normal.multiplyScalar(-1));
-            normal2.sub(plane.normal.multiplyScalar(-1));
-            
-            let closestNormal = Math.min(normal1.lengthSq(), normal2.lengthSq())
-            
-            if(!closestPlaneIndex || closestNormal < closestLength) {
-                closestPlaneIndex = i;
-                closestLength = closestNormal;
-            }
-        }
 
-        selectedPlane = closestPlaneIndex;
-    }
-
-    function startPlaneBow(planeNum, chordSet) {
-        let now = Tone.now();
-        chordSet[planeNum].loop.start(now);
-        showPlane(planeNum, 0.25);
-        sampler.triggerAttack(chordSet[planeNum].pitches);
-    }
-
-    function endPlaneBow(planeNum, chordSet) {
-        let now = Tone.now();
-        chordSet[planeNum].loop.stop(now);
-        hidePlane(planeNum, 0.25);
-        sampler.triggerRelease(chordSet[planeNum].pitches);
     }
 
     function lockUnlockRotation(ev) {
         if(ev.key === " ")
-            rotationLocked = !rotationLocked;
+            icosatone.rotationLocked = !icosatone.rotationLocked;
+        if(ev.key === "`") {
+            if(userNormalLine) scene.remove(userNormalLine);
+            if(selectedNormalLine) scene.remove(selectedNormalLine);
+
+            let points = [userPlane.normal, new THREE.Vector3(0, 0, 0)]
+            let geometry = new THREE.BufferGeometry().setFromPoints(points);
+            userNormalLine = new THREE.Line(geometry, new THREE.LineBasicMaterial());
+            scene.add(userNormalLine);
+            points = [icosatone.planes[icosatone.selectedPlane].normal, new THREE.Vector3(0, 0, 0)];
+            geometry = new THREE.BufferGeometry().setFromPoints(points);
+            selectedNormalLine = new THREE.Line(geometry, new THREE.LineBasicMaterial());
+            scene.add(selectedNormalLine)
+        }
     }
 }   
 
@@ -520,17 +315,273 @@ function getRandomColor() {
     return `hsl(${ Math.floor(Math.random() * 361) }, 100%, 70%)`;
 }
 
+function getNormals(geometry, mesh) {
+    geometry.computeVertexNormals();
+
+    const tri = new THREE.Triangle(); // for re-use
+    const indices = new THREE.Vector3(); // for re-use
+    const outNormal = new THREE.Vector3(); // this is the output normal you need
+
+    indices.fromArray(geometry.index.array, 0);
+    tri.setFromAttributeAndIndices(geometry.attributes.position,
+        indices.x,
+        indices.y,
+        indices.z);
+    tri.getNormal(outNormal);
+
+    outNormal.applyAxisAngle(new THREE.Vector3(1,0,0), mesh.rotation.x);
+    outNormal.applyAxisAngle(new THREE.Vector3(0,1,0), mesh.rotation.y);
+    outNormal.applyAxisAngle(new THREE.Vector3(0,0,1), mesh.rotation.z);
+    
+    return(outNormal);
+}
+
+function getMagnitude(vec3Array) {
+    return Math.sqrt(vec3Array[0] * vec3Array[0] + vec3Array[1] * vec3Array[1] + vec3Array[2] * vec3Array[2]);
+}
+
 class MusicalPlane {
-    constructor() {
-        this.mesh = planeMesh;
-        this.wireframe = planeWireframe; 
-        this.geometry = planeGeometry;
-        this.lineMaterial = lineMaterial;
-        this.fillMaterial = fillMaterial;
-        this.color = materialColor;
-        this.processes = null;
-        this.normal = getNormals(planeGeometry, planeMesh);
+    constructor(number, color) {
+        this.geometry = new THREE.BufferGeometry();
+
+        let vertices = planeIndices.slice(6 * number, 6 * (number + 1)); // for UL/UR/LL/LR = B/C/A/D plane, indices for faces in pattern CBA ADC
+        console.log(vertices);
+        let thisPlaneVertices = new Float32Array([
+            ...icoVertices.slice(vertices[0] * 3, vertices[0] * 3 +3),
+            ...icoVertices.slice(vertices[1] * 3, vertices[1] * 3 +3),
+            ...icoVertices.slice(vertices[2] * 3, vertices[2] * 3 +3),
+            ...icoVertices.slice(vertices[4] * 3, vertices[4] * 3 +3)
+        ]); // get CBA and D
+
+        console.log(thisPlaneVertices);
+        this.geometry.setIndex(planePattern);
+        this.geometry.setAttribute('position', new THREE.BufferAttribute( thisPlaneVertices , 3 ));
+
+        this.fillMaterial = new THREE.MeshBasicMaterial( {
+            color: color, 
+            side: THREE.DoubleSide, 
+            polygonOffset: true,
+            polygonOffsetFactor: 1, 
+            polygonOffsetUnits: 1,
+            depthTest: false
+        } );
+        this.fillMaterial.transparent = true;
+        this.fillMaterial.opacity = 0;
+
+        this.lineMaterial = new LineMaterial( {
+            color: color,
+            linewidth: 2,
+            depthTest: false
+        } );
+        this.lineMaterial.transparent = true;
+        this.lineMaterial.opacity = 0;
+
+        let planeWireGeometry = new WireframeGeometry2(this.geometry);
+        this.wireframe = new Wireframe(planeWireGeometry, this.lineMaterial);
+        this.mesh = new THREE.Mesh(this.geometry, this.fillMaterial);
+
+        scene.add(this.mesh);
+        scene.add(this.wireframe);
+
+        this.number = number;
+        this.process = null;
+        this.trueOpacity = 0;
+        this.selected = false;
+        this.normal = getNormals(this.geometry, this.mesh);
+
+        this.chord = [];
+        this.soundLoop = null;
     }
 
+    initChord(pitches, sampler) {
+        this.soundLoop = new Tone.Loop((time)=> {
+            sampler.triggerAttack(pitches);
+        }, 1);
+        this.chord = pitches;
+    }
+
+    show(time = 0.25) {
+        this.process = {direction: 1, time: time};
+    }
+
+    hide(time = 0.25) {
+        this.process = {direction: -1, time: time};
+    }
+
+    updateNormal() {
+        this.normal = getNormals(this.geometry, this.mesh);
+    }
+
+    updateOpacity() {
+        if(this.process) {
+            if(this.process.time == 0) {
+                this.trueOpacity = ( this.direction + 1 ) / 2;
+                this.process = null;
+            } 
+
+            // line opacity 1 in 0.5s, with interval of 60 updates per second
+            let increment = 1 / 60 / this.process.time * this.process.direction;
+        
+            if(this.trueOpacity + increment >= 1) {
+                this.trueOpacity = 1;
+                this.process = null;
+            } else if(this.trueOpacity + increment <= 0) {
+                this.trueOpacity = 0;
+                this.process = null;
+            } else {
+                this.trueOpacity += increment;
+            }
+        }
+
+        if(this.selected) {
+            this.lineMaterial.opacity = 1;
+        } else {
+            this.lineMaterial.opacity = this.trueOpacity;
+        }
+        this.fillMaterial.opacity = this.trueOpacity / 3;
+    }
+
+    bow(sampler) {
+        let now = Tone.now();
+        this.soundLoop.start(now);
+        this.show();
+        sampler.triggerAttack(this.chord);
+    }
+
+    unbow(sampler) {
+        let now = Tone.now();
+        this.soundLoop.stop(now);
+        this.hide();
+        sampler.triggerRelease(this.chord);
+    }
+
+}
+
+class Icosatone {
+    constructor(uid) {
+        this.uid = uid;
+        this.planes = new Array(15);
+        this.selectedPlane = null;
+        
+        this.rotationLocked = false;
+        this.planeLocked = false;
+
+        this.sampler = new Tone.Sampler({
+            "A3": "samples/A3.mp3",
+        }).toDestination();
+
+        let geometry = new THREE.BufferGeometry();
+        geometry.setIndex(icoIndices);
+        geometry.setAttribute('position', new THREE.BufferAttribute( icoVertices , 3 ));
+
+        let wireGeometry = new WireframeGeometry2( geometry );
+        this.lineMaterial = new LineMaterial( {color: 0xffffff, linewidth: 2, depthTest: false} );
+
+        this.wireframe = new Wireframe(wireGeometry, this.lineMaterial);
+        scene.add( this.wireframe );
+
+        this.initPlanes();
+        this.initSampler();
+    }
+
+    initSampler() {
+        const vibrato = new Tone.Vibrato({
+            maxDelay : 0.005 ,
+            frequency : 1 ,
+            depth : 0.2
+        }).toDestination();
+            
+        const reverb = new Tone.Reverb({
+            decay: 5
+        }).toDestination();
+        
+        this.sampler.release = 0.6;
+        this.sampler.volume.value = -20;
+        this.sampler.connect(vibrato);
+        this.sampler.connect(reverb);
+    }
+
+    initPlanes() {
+        for(let i = 0; i < 15; i++) {
+            this.planes[i] = new MusicalPlane(i, getRandomColor())
+        }
+    }
+
+    initChords() {
+        for(let i = 0; i < 15; i++) {
+            this.planes[i].initChord(chords[i].pitches, this.sampler);
+        }
+    }
     
+    rotate(x, y, z) {
+        this.wireframe.rotation.x += x;
+        this.wireframe.rotation.y += y;
+        this.wireframe.rotation.z += z;
+
+        for(let plane of this.planes) {
+            plane.mesh.rotation.x += x;
+            plane.mesh.rotation.y += y;
+            plane.mesh.rotation.z += z;
+            plane.wireframe.rotation.x += x;
+            plane.wireframe.rotation.y += y;
+            plane.wireframe.rotation.z += z;
+            plane.updateNormal();
+        }
+    }
+
+    update() {
+        if(!this.rotationLocked) {
+            this.rotate(0, 0.002, 0);
+        }
+        this.lineMaterial.resolution.set( window.innerWidth, window.innerHeight );
+
+        for(let plane of this.planes) {
+            plane.updateOpacity();
+            plane.lineMaterial.resolution.set( window.innerWidth, window.innerHeight );
+        }
+
+
+    }
+
+    selectPlane(normalArray) {
+
+        if(this.planeLocked) return;
+
+        let closestPlane, greatestSimilarity;
+
+        for(let i = 0; i < 15; i++) {
+            let plane = this.planes[i];
+
+            let planeNormal = plane.normal.toArray();
+            // cosine similarity
+            let dotProd = normalArray[0] * planeNormal[0] + normalArray[1] * planeNormal[1] + normalArray[2] * planeNormal[2];
+            let magnitudes = getMagnitude(planeNormal) * getMagnitude(normalArray);
+
+            let similarity = Math.abs(dotProd / magnitudes);
+            
+            if(!closestPlane || similarity > greatestSimilarity) {
+                closestPlane = i;
+                greatestSimilarity = similarity;
+            }
+        }
+
+        for(let i = 0; i < 15; i++) {
+            if(i == closestPlane) this.planes[i].selected = true;
+            else this.planes[i].selected = false;
+
+        }
+
+        this.selectedPlane = closestPlane;
+        // console.log(closestPlane, greatestSimilarity);
+    }
+
+    bow(planeNum) {
+        this.planeLocked = true;
+        this.planes[planeNum].bow(this.sampler);
+    }
+
+    unbow(planeNum, sampler) {
+        this.planeLocked = false;
+        this.planes[planeNum].unbow(this.sampler);
+    }
 }
