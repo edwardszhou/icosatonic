@@ -168,14 +168,11 @@ const userPlaneIndices = [
 let icosatone;
 let userPlane;
 let thisUser;
+let recordPlayer;
+
 let clients = {};
 
 let socket;
-let frameNumber = 0;
-let recording = new Array(600);
-let isRecording = false;
-// let userNormalLine;
-// let selectedNormalLine;
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -214,10 +211,13 @@ window.onload = () => {
 
     thisUser = new UserSampler(getRandomColor(), -1);
     icosatone = new Icosatone();
+    recordPlayer = new RecordPlayer();
 
     initUserPlane();
     initDOM();
+    initControls();
     initSocket();
+    
     socket.emit('new-user', thisUser.color);
 
     Tone.loaded().then(()=> {
@@ -225,144 +225,6 @@ window.onload = () => {
     });
 
     animate();
-
-    window.addEventListener('resize', resizeScene);
-    window.addEventListener('mousemove', updateUserPlane);
-    window.addEventListener('keydown', (ev)=> {
-        if(ev.key === " ") {
-            isRecording = true;
-            frameNumber = 0;
-            recording = new Array(600);
-        }
-    });
-    window.addEventListener('mousedown', (ev)=> {
-        if(ev.button > 1) return;
-
-        let wasSustained = userPlane.sustain;
-        if(wasSustained) {
-            userPlane.sustain = false;
-            icosatone.unbow(icosatone.selectedPlane, thisUser);
-            socket.emit('unbow', icosatone.selectedPlane);
-            return;
-        }
-        if(ev.shiftKey && !wasSustained) {
-            userPlane.sustain = true;
-        }
-        
-        icosatone.bow(icosatone.selectedPlane, thisUser);
-        socket.emit('bow', icosatone.selectedPlane);
-        
-    });
-    window.addEventListener('mouseup', (ev)=> {
-        if(userPlane.sustain || ev.button > 1) return;
-
-        icosatone.unbow(icosatone.selectedPlane, thisUser);
-        socket.emit('unbow', icosatone.selectedPlane);
-    });
-
-    function animate() {
-        requestAnimationFrame(animate);
-        controls.update();
-        if(isRecording) {
-            frameNumber++;
-            if(frameNumber == 600) {
-                isRecording = false;
-
-                for(let i = 599; i >= 0; i--) {
-                    if(recording[i] && recording[i].bow == true) {
-                        delete recording[i];
-                        break;
-                    } else if(recording[i]) {
-                        break;
-                    }
-                }
-                console.log(recording);
-            }
-        }
-        
-
-        userPlane.lineMaterial.resolution.set( window.innerWidth, window.innerHeight );
-        
-        icosatone.selectPlane(userPlane.normal.toArray());
-        icosatone.update();
-
-        // renderer.render(scene, camera);
-        composer.render();
-    }
-
-    function resizeScene() {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-    
-        renderer.setSize( window.innerWidth, window.innerHeight );
-    }
-
-    function initUserPlane() {
-        let planeGeometry = new THREE.BufferGeometry();
-        planeGeometry.setIndex(userPlaneIndices);
-        planeGeometry.setAttribute('position', new THREE.BufferAttribute(userPlaneVertices, 3));
-        let materialColor = thisUser.color;
-        let fillMaterial = new THREE.MeshBasicMaterial( {
-            color: materialColor, 
-            side: THREE.DoubleSide, 
-            polygonOffset: true,
-            polygonOffsetFactor: 1, 
-            polygonOffsetUnits: 1,
-            depthTest: false
-        } );
-
-        fillMaterial.transparent = true;
-        fillMaterial.opacity = 0.5;
-
-        let planeWireGeometry = new WireframeGeometry2(planeGeometry);
-        let lineMaterial = new LineMaterial( {
-            color: materialColor,
-            linewidth: 2,
-            depthTest: false
-        } );
-
-        lineMaterial.transparent = true;
-        lineMaterial.opacity = 1;
-
-        let planeWireframe = new Wireframe(planeWireGeometry, lineMaterial);
-        let planeMesh = new THREE.Mesh(planeGeometry, fillMaterial)
-
-        // scene.add(planeMesh);
-        // scene.add(planeWireframe);
-        
-        userPlane = {
-            mesh: planeMesh,
-            wireframe: planeWireframe, 
-            geometry: planeGeometry, 
-            lineMaterial: lineMaterial, 
-            fillMaterial: fillMaterial, 
-            color: materialColor, 
-            processes: null,
-            sustain: false,
-            normal: getNormals(planeGeometry, planeMesh),
-        };
-
-    }
-    
-    function updateUserPlane(ev) {
-
-        if(icosatone.planeLocked) return;
-
-        let newRotation = [ -1 * (ev.clientX / window.innerWidth - 0.5) * Math.PI, (ev.clientY / window.innerHeight - 0.5) * Math.PI];
-
-        let magnitude = Math.sqrt(Math.pow(newRotation[0], 2) + Math.pow(newRotation[1], 2))
-        if(magnitude > Math.PI / 2) {
-            newRotation[0] = newRotation[0] / magnitude * Math.PI / 2;
-            newRotation[1] = newRotation[1] / magnitude * Math.PI / 2;
-        }
-
-        userPlane.mesh.rotation.z = newRotation[0];
-        userPlane.mesh.rotation.x = newRotation[1];
-        userPlane.wireframe.rotation.z = newRotation[0];
-        userPlane.wireframe.rotation.x = newRotation[1];
-
-        userPlane.normal = getNormals(userPlane.geometry, userPlane.mesh);
-    }
 
 }   
 function initSocket() {
@@ -385,7 +247,43 @@ function initSocket() {
     });
 }
 
+function initControls() {
+    window.addEventListener('resize', resizeScene);
+    window.addEventListener('mousemove', updateUserPlane);
+    window.addEventListener('keydown', (ev)=> {
+        if(ev.key === " ") {
+            recordPlayer.startRecording();
+        }
+    });
+    window.addEventListener('mousedown', (ev)=> {
+        if(ev.button > 1) return;
+
+        if(userPlane.planeLocked == true) {
+            userPlane.sustain = false;
+            icosatone.unbow(icosatone.selectedPlane, thisUser);
+            socket.emit('unbow', icosatone.selectedPlane);
+            return;
+        }
+
+        if(ev.shiftKey) {
+            userPlane.sustain = true;
+        }
+        
+        icosatone.bow(icosatone.selectedPlane, thisUser);
+        socket.emit('bow', icosatone.selectedPlane);
+        
+    });
+
+    window.addEventListener('mouseup', (ev)=> {
+        if(userPlane.sustain || ev.button > 1) return;
+
+        icosatone.unbow(icosatone.selectedPlane, thisUser);
+        socket.emit('unbow', icosatone.selectedPlane);
+    });
+}
+
 let infoShowing = true, samplesShowing = true;
+
 
 function initDOM() {
     let color = thisUser.color;
@@ -502,6 +400,95 @@ function initDOM() {
     infoInstructions.style.animation = 'fadeIn 1s linear 1.5s forwards'
     
 }
+
+function initUserPlane() {
+    let planeGeometry = new THREE.BufferGeometry();
+    planeGeometry.setIndex(userPlaneIndices);
+    planeGeometry.setAttribute('position', new THREE.BufferAttribute(userPlaneVertices, 3));
+    let materialColor = thisUser.color;
+    let fillMaterial = new THREE.MeshBasicMaterial( {
+        color: materialColor, 
+        side: THREE.DoubleSide, 
+        polygonOffset: true,
+        polygonOffsetFactor: 1, 
+        polygonOffsetUnits: 1,
+        depthTest: false
+    } );
+
+    fillMaterial.transparent = true;
+    fillMaterial.opacity = 0.5;
+
+    let planeWireGeometry = new WireframeGeometry2(planeGeometry);
+    let lineMaterial = new LineMaterial( {
+        color: materialColor,
+        linewidth: 2,
+        depthTest: false
+    } );
+
+    lineMaterial.transparent = true;
+    lineMaterial.opacity = 1;
+
+    let planeWireframe = new Wireframe(planeWireGeometry, lineMaterial);
+    let planeMesh = new THREE.Mesh(planeGeometry, fillMaterial)
+
+    // scene.add(planeMesh);
+    // scene.add(planeWireframe);
+    
+    userPlane = {
+        mesh: planeMesh,
+        wireframe: planeWireframe, 
+        geometry: planeGeometry, 
+        lineMaterial: lineMaterial, 
+        fillMaterial: fillMaterial, 
+        color: materialColor, 
+        processes: null,
+        sustain: false,
+        normal: getNormals(planeGeometry, planeMesh),
+    };
+
+}
+
+function updateUserPlane(ev) {
+
+    if(icosatone.planeLocked) return;
+
+    let newRotation = [ -1 * (ev.clientX / window.innerWidth - 0.5) * Math.PI, (ev.clientY / window.innerHeight - 0.5) * Math.PI];
+
+    let magnitude = Math.sqrt(Math.pow(newRotation[0], 2) + Math.pow(newRotation[1], 2))
+    if(magnitude > Math.PI / 2) {
+        newRotation[0] = newRotation[0] / magnitude * Math.PI / 2;
+        newRotation[1] = newRotation[1] / magnitude * Math.PI / 2;
+    }
+
+    userPlane.mesh.rotation.z = newRotation[0];
+    userPlane.mesh.rotation.x = newRotation[1];
+    userPlane.wireframe.rotation.z = newRotation[0];
+    userPlane.wireframe.rotation.x = newRotation[1];
+
+    userPlane.normal = getNormals(userPlane.geometry, userPlane.mesh);
+}
+
+function resizeScene() {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+
+    renderer.setSize( window.innerWidth, window.innerHeight );
+}
+
+function animate() {
+    requestAnimationFrame(animate);
+    controls.update();
+    recordPlayer.update();
+
+    userPlane.lineMaterial.resolution.set( window.innerWidth, window.innerHeight );
+    
+    icosatone.selectPlane(userPlane.normal.toArray());
+    icosatone.update();
+
+    // renderer.render(scene, camera);
+    composer.render();
+}
+
 function getRandomColor() {
     let num = Math.floor(Math.random() * 361);
     while(num < 260 && num > 225) {
@@ -753,17 +740,21 @@ class Icosatone {
     bow(planeNum, user) {
         this.planeLocked = true;
         this.planes[planeNum].bow(user);
-        if(recording) {
-            recording[frameNumber] = {bow: true, plane: planeNum, uid: user.id + '_instance'};
+        if(recordPlayer.isRecording) {
+            recordPlayer.recordStroke('bow', planeNum, user.id);
         }
     }
 
     unbow(planeNum, user) {
         this.planeLocked = false;
         this.planes[planeNum].unbow(user);
-        if(recording) {
-            recording[frameNumber] = {bow: false, plane: planeNum, uid: user.id + '_instance'};
+        if(recordPlayer.isRecording) {
+            recordPlayer.recordStroke('unbow', planeNum, user.id);
         }
+    }
+
+    unbowAll(user) {
+
     }
 }
 
@@ -817,5 +808,98 @@ class UserSampler {
         this.soundLoops[chordNum].stop(now);
         this.sampler.triggerRelease(chords[chordNum].pitches);
         this.soundTimeout = setInterval(()=>{this.sampler.triggerRelease(chords[chordNum].pitches)}, 10);
+    }
+}
+
+class RecordPlayer {
+    constructor() {
+        this.recorder = null;
+        this.recordedUsers = new Set();
+
+        this.player = null;
+
+        this.currentFrame = 0;
+        this.isRecording = false;
+        this.isPlaying = false;
+    }
+
+    recordStroke(stroke, planeNum, uid) {
+        if(!this.isRecording || this.isPlaying) throw new Error(`failed to record stroke: isRecording = ${this.isRecording}, isPlaying = ${this.isPlaying}`);
+
+        if(!this.recordedUsers.has(uid)) {
+            this.recordedUsers.add(uid);
+        }
+
+        this.recorder[this.currentFrame].push({stroke: stroke, planeNum: planeNum , id: uid + "_instance"});
+    }
+
+    startRecording() {
+        if(this.isRecording || this.isPlaying) throw new Error(`failed to start recording: isRecording = ${this.isRecording}, isPlaying = ${this.isPlaying}`);
+        this.recorder = Array.from({length: 600}, ()=> []);
+        this.currentFrame = 0;
+        this.isRecording = true;
+    }
+
+    stopRecording() {
+        if(this.isPlaying) throw new Error(`failed to end recording: isRecording = ${this.isRecording}, isPlaying = ${this.isPlaying}`);
+
+        for(let user of this.recordedUsers) {
+            this.recorder[599].push({stroke: 'unbowAll', id: user + "_instance"});
+        }
+
+        this.recordedUsers.clear();
+        this.isRecording = false;
+        console.log(this.recorder);
+        console.log('recording ended');
+        // send to socket server;
+    }
+
+    startPlaying(recording) {
+        if(this.isRecording || this.isPlaying) throw new Error(`failed to start playing: isRecording = ${this.isRecording}, isPlaying = ${this.isPlaying}`);
+
+        this.player = recording;
+        this.currentFrame = 0;
+        this.isPlaying = true;
+    }
+
+    stopPlaying() {
+        if(this.isRecording) throw new Error(`failed to stop playing: isRecording = ${this.isRecording}, isPlaying = ${this.isPlaying}`);
+
+        this.player = null;
+        this.isPlaying = false;
+    }
+
+    updatePlayer() {
+        for(let strokes of this.player[this.currentFrame]) {
+            switch (strokes.stroke) {
+                case 'bow':
+                    icosatone.bow(stroke.planeNum, stroke.id);
+                    break;
+                case 'unbow':
+                    icosatone.unbow(stroke.planeNum, stroke.id);
+                    break;
+                case 'unbowAll':
+                    for(let i = 0; i < 15; i++) {
+                        icosatone.unbow(i, stroke.id);
+                    }
+                    break;
+            }
+        }
+    }
+
+    update() {
+        if(!this.isPlaying && !this.isRecording) return;
+
+        if(this.isPlaying) this.updatePlayer();
+
+        this.currentFrame++;
+
+        if(this.currentFrame == 600) {
+            if(this.isRecording) {
+                this.stopRecording();
+            } else {
+                this.stopPlaying();
+            }
+        }
     }
 }
