@@ -216,7 +216,7 @@ window.onload = () => {
     icosatone = new Icosatone();
 
     initUserPlane();
-    initUI();
+    initDOM();
     initSocket();
     socket.emit('new-user', thisUser.color);
 
@@ -385,14 +385,21 @@ function initSocket() {
     });
 }
 
-let infoShowing = true;
+let infoShowing = true, samplesShowing = true;
 
-function initUI() {
+function initDOM() {
     let color = thisUser.color;
 
-    let infoContent = document.getElementById('info-content')
-    let hideBtn = document.getElementById('hide-btn');
-    // hideBtn.setAttribute('showing', true);
+    let infoContent = document.getElementById('info-content');
+    let hideBtn = document.getElementById('info-hide-btn');
+    
+    let samplesHideBtn = document.getElementById('samples-hide-btn');
+    let samplesContent = document.getElementById('samples-content');
+    samplesContent.style.animation = 'fadeIn 1s linear 2.5s forwards';
+    setTimeout(()=>{ samplesContent.style.opacity = 1 }, 3500);
+
+    hideBtn.style.animation = 'fadeIn 1s linear 1.5s forwards';
+
     hideBtn.addEventListener('mouseenter', () => {
         hideBtn.style.color = color;
         hideBtn.style.textShadow = `0 0 5px ${color}`
@@ -403,17 +410,16 @@ function initUI() {
     });
     hideBtn.addEventListener('click', ()=> {
         if(infoShowing) {
-            infoContent.style.animation = 'slideOut 2s ease forwards';
+            infoContent.style.animation = 'slideOutLeft 2s ease forwards';
             hideBtn.textContent = '>';
             infoShowing = false;
         } else {
-            infoContent.style.animation = 'slideIn 2s ease forwards';
+            infoContent.style.animation = 'slideInLeft 2s ease forwards';
             hideBtn.textContent = '<';
             infoShowing = true;
         }
        
     });
-
     hideBtn.addEventListener('mousedown', (ev) => {
         ev.stopPropagation();
     });
@@ -421,9 +427,79 @@ function initUI() {
         ev.stopPropagation();
     });
 
+    samplesHideBtn.addEventListener('mouseenter', () => {
+        samplesHideBtn.style.color = color;
+        samplesHideBtn.style.textShadow = `0 0 5px ${color}`
+    });
+    samplesHideBtn.addEventListener('mouseleave', () => {
+        samplesHideBtn.style.color = 'darkGray';
+        samplesHideBtn.style.textShadow = 'unset';
+    });
+    samplesHideBtn.addEventListener('click', ()=> {
+        if(samplesShowing) {
+            samplesContent.style.animation = 'slideOutRight 2s ease forwards';
+            samplesHideBtn.textContent = '<';
+            samplesShowing = false;
+        } else {
+            samplesContent.style.animation = 'slideInRight 2s ease forwards';
+            samplesHideBtn.textContent = '>';
+            samplesShowing = true;
+        }
+       
+    });
+
+    samplesHideBtn.addEventListener('mousedown', (ev) => {
+        ev.stopPropagation();
+    });
+    samplesHideBtn.addEventListener('mouseup', (ev) => {
+        ev.stopPropagation();
+    });
+
+    let samplesList = document.getElementById('samples-list');
+    samplesList.addEventListener('mousedown', (ev) => {
+        ev.stopPropagation();
+    });
+    samplesList.addEventListener('mouseup', (ev) => {
+        ev.stopPropagation();
+    });
+
+    let newStyles = document.createElement("style");
+    newStyles.appendChild(document.createTextNode(`
+        #samples-content ::-webkit-scrollbar-thumb:hover { background: ${color}; }
+        #start-recording:hover { box-shadow: 0 0 40px 0px ${color}; }
+        .play-btn { color: ${color}; }
+    `));
+    document.getElementsByTagName("head")[0].appendChild(newStyles);	
+
+    let recordingProgress = document.getElementById('recording-progress');
+    recordingProgress.style.backgroundColor = `${color}`;
+    recordingProgress.style.boxShadow = `0 0 40px 8px ${color}`;
+
+    for(let recording of document.getElementsByClassName('sample-recording')) {
+        let playBtn = recording.querySelector('.play-btn');
+        let playProgress = recording.querySelector('hr');
+        playProgress.style.boxShadow = `0 0 10px 0px ${color}`;
+        playProgress.style.borderColor = color;
+        playBtn.style.textShadow = `0 0 15px ${color}`
+        recording.addEventListener('mouseenter', ()=> {
+            playBtn.style.opacity = 1;
+        })
+        recording.addEventListener('mouseleave', ()=> {
+            playBtn.style.opacity = 0;
+        })
+    };
+    
+
     let infoSeparator = document.getElementById('info-separator');
     infoSeparator.style.boxShadow = `0 0 50px 8px ${color}`;
     infoSeparator.style.borderColor = color;
+    infoSeparator.style.animation = 'extend 2s ease 1.5s forwards';
+
+    let infoTitle = document.getElementById('info-title');
+    infoTitle.style.animation = 'fadeIn 1s linear 0.5s forwards';
+
+    let infoInstructions = document.getElementById('info-instructions');
+    infoInstructions.style.animation = 'fadeIn 1s linear 1.5s forwards'
     
 }
 function getRandomColor() {

@@ -10,22 +10,23 @@ body {
 	to { opacity: 1; }
 }
 
-@keyframes slideOut {
-	from {
-        left: 5%;
-    }
-	to { 
-        left: -22%;
-    }
+@keyframes slideOutLeft {
+	from { left: 5%; }
+	to { left: -23%; }
 }
 
-@keyframes slideIn {
-	from {
-        left: -22%;
-    }
-	to { 
-        left: 5%;
-    }
+@keyframes slideInLeft {
+	from { left: -23%; }
+	to { left: 5%; }
+}
+@keyframes slideOutRight {
+	from { right: 5%; }
+	to { right: -13%; }
+}
+
+@keyframes slideInRight {
+	from { right: -13%; }
+	to { right: 5%; }
 }
 
 @keyframes extend {
@@ -34,83 +35,189 @@ body {
         opacity: 0;
     }
     to {
-        width: 30%;
+        width: 35%;
         opacity: 1;
     }
 }
-
-#button-container {
+.content-section {
     position: fixed;
-    top: 0;
-    left: 0;
-    display: flex;
-    flex-direction: row;
-    justify-content: center;
-    align-items: center;
-    flex-wrap: wrap;
-
-    width: 100%;
-    height: 100%;
-}
-
-button {
-    margin: 2.5%;
-    padding: 0.5%;
-    font-size: 24px;
-    border: solid white 1px;
-    background-color: transparent;
-    color: white;
-    cursor: pointer;
+    /* overflow: hidden; */
+    user-select: none;
 }
 
 #info-content {
-    position: fixed;
-    top: 5%;
+    top: 7%;
     left: 5%;
     width: 25%;
-    overflow: hidden;
 }
-#heading {
-    margin: 5% 0 5% 0;
+
+#samples-content {
+    top: 25%;
+    right: 5%;
+    width: 15%;
+
+    height: 50%;
+    opacity: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    overflow-x: hidden;
+}
+
+.heading {
+    margin-bottom: 5%;
     width: 100%;
     display: flex;
     justify-content: space-between;
     align-items: center;
 }
 
-#title {
-    opacity: 0;
-    animation: fadeIn 1s linear 0.5s forwards;
-    transition-duration: 1s;
+#samples-heading {
+    justify-content: flex-start;
+}
 
+#info-title {
+    opacity: 0;
+    /* animation: fadeIn 1s linear 0.5s forwards; */
+    transition-duration: 1s;
+}
+
+#samples-title {
+    width: 80%;
 }
 
 #info-separator {
     margin: 10% 0 10% 5%;
     width: 0%;
     opacity: 0;
-    animation: extend 2s ease 1.5s forwards;
+    /* animation: extend 2s ease 1.5s forwards; */
 }
-#heading > * {
+
+#samples-separator {
+    margin: 10% 0;
+    width: 80%;
+}
+
+#info-heading > * {
     margin: 0;
-    font-size: 5vh;
+    font-size: 5vmin;
     font-weight: 50;
 }
 
-#hide-btn {
+#samples-heading > * {
+    margin: 0;
+    font-size: 3vmin;
+    font-weight: 50;
+}
+
+#info-hide-btn {
     cursor: pointer;
     transition-duration: 0.25s;
     color: darkGray;
+    margin-left: 10%;
 
     opacity: 0;
-    animation: fadeIn 1s linear 1.5s forwards;
+    /* animation: fadeIn 1s linear 1.5s forwards; */
+}
+
+#samples-hide-btn {
+    cursor: pointer;
+    transition-duration: 0.25s;
+    color: darkGray;
+    
+    width: 20%;
 }
  
-#instructions {
-    font-size: 2vh;
-    margin-left: 10%;
+#info-instructions {
+    font-size: 2vmin;
+    margin-left: 5%;
     width: 80%;
     opacity: 0;
 
-    animation: fadeIn 1s linear 1.5s forwards;
+    /* animation: fadeIn 1s linear 1.5s forwards; */
+}
+#samples-list {
+    width: 80%;
+    flex-grow: 1;
+    border-right: solid 1px white;
+    overflow: auto;
+}
+
+#samples-content ::-webkit-scrollbar {
+    width: 5px;
+    background: black;
+    transition-duration: 0.25s;
+}
+#samples-content ::-webkit-scrollbar-track {
+    background: black;
+    transition-duration: 0.25s;
+}
+#samples-content ::-webkit-scrollbar-thumb {
+    background: white;
+    transition-duration: 0.25s;
+}
+
+.sample-recording {
+    width: 100%;
+    margin: 0 0 10% 0;
+    padding: 0;
+    font-size: 1.6vmin;
+    position: relative;
+
+    cursor: pointer;
+}
+.sample-recording p {
+    margin: 0;
+    width: 80%;
+}
+
+.play-btn {
+    position: absolute;
+    right: 10%;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 2vmin;
+    opacity: 0;
+}
+.play-progress {
+    position: absolute;
+    bottom: -0.5em;
+    left: 0;
+    width: 50%;
+    margin: 0;
+}
+
+#samples-controls {
+    width: 80%;
+    height: 6vmin;
+    margin: 5% 0 12% 0;
+    border: solid white 1px;
+    background-color: transparent;
+    color: white;
+    cursor: pointer;
+    position: relative;
+}
+#start-recording {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    font-size: 2.5vmin;
+    font-family:'Courier New', Courier, monospace;
+    border: none;
+    background-color: transparent;
+    color: white;
+    cursor: pointer;
+
+    z-index: 2;
+    transition-duration: 0.25s;
+}
+
+#recording-progress {
+    height: 100%;
+    margin: 0;
+    position: absolute;
+    width: 75%;
+    opacity: 60%;
 }
