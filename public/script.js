@@ -121,52 +121,9 @@ const icoVertices = new Float32Array([
     t, 0, - 1, 	t, 0, 1, 	- t, 0, - 1, 	- t, 0, 1
 ]);
 
-const icoIndices = [
-    0, 11, 5, 	0, 5, 1, 	0, 1, 7, 	0, 7, 10, 	0, 10, 11,
-    1, 5, 9, 	5, 11, 4,	11, 10, 2,	10, 7, 6,	7, 1, 8,
-    3, 9, 4, 	3, 4, 2,	3, 2, 6,	3, 6, 8,	3, 8, 9,
-    4, 9, 5, 	2, 4, 11,	6, 2, 10,	8, 6, 7,	9, 8, 1
-];
-
-const planeIndices = [
-    8, 0, 11,   11, 3, 8,    // PLANE 1
-    0, 1, 3,    3, 2, 0,     // PLANE 2
-    2, 9, 1,    1, 10, 2,    // PLANE 3
-    4, 9, 7,    7, 10, 4,    // PLANE 4
-    4, 11, 7,   7, 8, 4,     // PLANE 5
-
-    4, 5, 7,    7, 6, 4,     // PLANE 6
-    5, 1, 6,    6, 2, 5,     // PLANE 7
-    1, 8, 2,    2, 11, 1,    // PLANE 8
-    3, 4, 0,    0, 7, 3,     // PLANE 9
-
-    5, 0, 6,    6, 3, 5,     // PLANE 10
-    0, 10, 3,   3, 9, 0,     // PLANE 11
-    2, 4, 1,    1, 7, 2,     // PLANE 12
-
-    8, 10, 11,  11, 9, 8,    // PLANE 13
-    10, 6, 9,   9, 5, 10,    // PLANE 14
-
-    5, 8, 6,    6, 11, 5,    // PLANE 15
-];
-
-const planePattern = [
-    0, 1, 2, 2, 3, 0
-]
-
-const userPlaneVertices = new Float32Array([
-    -1, 0, -1,
-    -1, 0, 1,
-    1, 0, -1,
-    1, 0, 1
-]);
-
-const userPlaneIndices = [
-    0, 1, 2,    2, 3, 1
-];
+let scene, camera, renderer, composer, controls;
 
 let icosatone;
-let userPlane;
 let thisUser;
 let recordPlayer;
 
@@ -174,49 +131,17 @@ let clients = {};
 
 let socket;
 
-const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
-const renderer = new THREE.WebGLRenderer();
-const controls = new OrbitControls( camera, renderer.domElement );
-
-camera.position.set(0, 1, 6);
-camera.lookAt(0, 0, 0);
-
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(window.devicePixelRatio);
-const renderPass = new RenderPass(scene, camera);
-const composer = new EffectComposer(renderer);
-composer.addPass(renderPass);
-
-const bloomPass = new UnrealBloomPass( new THREE.Vector2( window.innerWidth, window.innerHeight ), 1, 1.2, 0.28);
-composer.addPass(bloomPass);
-
-const outputPass = new OutputPass();
-composer.addPass(outputPass);
-
-
-controls.update();
-controls.enableDamping = true; // an animation loop is required when either damping or auto-rotation are enabled
-controls.dampingFactor = 0.02;
-controls.enablePan = false;
-controls.enableZoom = false;
-controls.rotateSpeed = 0.25;
-controls.mouseButtons = {
-    RIGHT: THREE.MOUSE.ROTATE
-}
-
 window.onload = () => {
 
-    document.body.appendChild(renderer.domElement)
+    initScene();
+    initSocket();
 
-    thisUser = new UserSampler(getRandomColor(), -1);
-    icosatone = new Icosatone();
+    thisUser = new ActiveUser(getRandomColor());
     recordPlayer = new RecordPlayer();
+    icosatone = new Icosatone(thisUser, recordPlayer);
 
-    initUserPlane();
     initDOM();
     initControls();
-    initSocket();
     
     socket.emit('new-user', thisUser.color);
 
@@ -226,7 +151,43 @@ window.onload = () => {
 
     animate();
 
-}   
+}
+
+function initScene() {
+    scene = new THREE.Scene();
+    camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
+    renderer = new THREE.WebGLRenderer();
+    controls = new OrbitControls( camera, renderer.domElement );
+
+    camera.position.set(0, 1, 6);
+    camera.lookAt(0, 0, 0);
+
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    const renderPass = new RenderPass(scene, camera);
+    composer = new EffectComposer(renderer);
+    composer.addPass(renderPass);
+
+    const bloomPass = new UnrealBloomPass( new THREE.Vector2( window.innerWidth, window.innerHeight ), 1, 1.2, 0.28);
+    composer.addPass(bloomPass);
+
+    const outputPass = new OutputPass();
+    composer.addPass(outputPass);
+
+
+    controls.update();
+    controls.enableDamping = true; // an animation loop is required when either damping or auto-rotation are enabled
+    controls.dampingFactor = 0.02;
+    controls.enablePan = false;
+    controls.enableZoom = false;
+    controls.rotateSpeed = 0.25;
+    controls.mouseButtons = {
+        RIGHT: THREE.MOUSE.ROTATE
+    }
+
+    document.body.appendChild(renderer.domElement)
+}
+
 function initSocket() {
     socket = io.connect();
 
@@ -249,7 +210,9 @@ function initSocket() {
 
 function initControls() {
     window.addEventListener('resize', resizeScene);
-    window.addEventListener('mousemove', updateUserPlane);
+    window.addEventListener('mousemove', (ev)=> {
+        thisUser.updatePlane(ev, icosatone);
+    });
     window.addEventListener('keydown', (ev)=> {
         if(ev.key === " ") {
             recordPlayer.startRecording();
@@ -258,32 +221,31 @@ function initControls() {
     window.addEventListener('mousedown', (ev)=> {
         if(ev.button > 1) return;
 
-        if(userPlane.planeLocked == true) {
-            userPlane.sustain = false;
-            icosatone.unbow(icosatone.selectedPlane, thisUser);
+        if(icosatone.planeLocked == true) {
+            thisUser.sustain = false;
+            icosatone.unbow(icosatone.selectedPlane, thisUser.sampler);
             socket.emit('unbow', icosatone.selectedPlane);
             return;
         }
 
         if(ev.shiftKey) {
-            userPlane.sustain = true;
+            thisUser.sustain = true;
         }
         
-        icosatone.bow(icosatone.selectedPlane, thisUser);
+        icosatone.bow(icosatone.selectedPlane, thisUser.sampler);
         socket.emit('bow', icosatone.selectedPlane);
         
     });
 
     window.addEventListener('mouseup', (ev)=> {
-        if(userPlane.sustain || ev.button > 1) return;
+        if(thisUser.sustain || ev.button > 1) return;
 
-        icosatone.unbow(icosatone.selectedPlane, thisUser);
+        icosatone.unbow(icosatone.selectedPlane, thisUser.sampler);
         socket.emit('unbow', icosatone.selectedPlane);
     });
 }
 
 let infoShowing = true, samplesShowing = true;
-
 
 function initDOM() {
     let color = thisUser.color;
@@ -401,73 +363,6 @@ function initDOM() {
     
 }
 
-function initUserPlane() {
-    let planeGeometry = new THREE.BufferGeometry();
-    planeGeometry.setIndex(userPlaneIndices);
-    planeGeometry.setAttribute('position', new THREE.BufferAttribute(userPlaneVertices, 3));
-    let materialColor = thisUser.color;
-    let fillMaterial = new THREE.MeshBasicMaterial( {
-        color: materialColor, 
-        side: THREE.DoubleSide, 
-        polygonOffset: true,
-        polygonOffsetFactor: 1, 
-        polygonOffsetUnits: 1,
-        depthTest: false
-    } );
-
-    fillMaterial.transparent = true;
-    fillMaterial.opacity = 0.5;
-
-    let planeWireGeometry = new WireframeGeometry2(planeGeometry);
-    let lineMaterial = new LineMaterial( {
-        color: materialColor,
-        linewidth: 2,
-        depthTest: false
-    } );
-
-    lineMaterial.transparent = true;
-    lineMaterial.opacity = 1;
-
-    let planeWireframe = new Wireframe(planeWireGeometry, lineMaterial);
-    let planeMesh = new THREE.Mesh(planeGeometry, fillMaterial)
-
-    // scene.add(planeMesh);
-    // scene.add(planeWireframe);
-    
-    userPlane = {
-        mesh: planeMesh,
-        wireframe: planeWireframe, 
-        geometry: planeGeometry, 
-        lineMaterial: lineMaterial, 
-        fillMaterial: fillMaterial, 
-        color: materialColor, 
-        processes: null,
-        sustain: false,
-        normal: getNormals(planeGeometry, planeMesh),
-    };
-
-}
-
-function updateUserPlane(ev) {
-
-    if(icosatone.planeLocked) return;
-
-    let newRotation = [ -1 * (ev.clientX / window.innerWidth - 0.5) * Math.PI, (ev.clientY / window.innerHeight - 0.5) * Math.PI];
-
-    let magnitude = Math.sqrt(Math.pow(newRotation[0], 2) + Math.pow(newRotation[1], 2))
-    if(magnitude > Math.PI / 2) {
-        newRotation[0] = newRotation[0] / magnitude * Math.PI / 2;
-        newRotation[1] = newRotation[1] / magnitude * Math.PI / 2;
-    }
-
-    userPlane.mesh.rotation.z = newRotation[0];
-    userPlane.mesh.rotation.x = newRotation[1];
-    userPlane.wireframe.rotation.z = newRotation[0];
-    userPlane.wireframe.rotation.x = newRotation[1];
-
-    userPlane.normal = getNormals(userPlane.geometry, userPlane.mesh);
-}
-
 function resizeScene() {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
@@ -479,13 +374,10 @@ function animate() {
     requestAnimationFrame(animate);
     controls.update();
     recordPlayer.update();
-
-    userPlane.lineMaterial.resolution.set( window.innerWidth, window.innerHeight );
     
-    icosatone.selectPlane(userPlane.normal.toArray());
+    icosatone.selectPlane(thisUser.plane.normal.toArray());
     icosatone.update();
 
-    // renderer.render(scene, camera);
     composer.render();
 }
 
@@ -523,8 +415,37 @@ function getMagnitude(vec3Array) {
 }
 
 class MusicalPlane {
-    constructor(number, color) {
+    constructor(number, user) {
+
+        this.user = user;
+
         this.geometry = new THREE.BufferGeometry();
+
+        const planeIndices = [
+            8, 0, 11,   11, 3, 8,    // PLANE 1
+            0, 1, 3,    3, 2, 0,     // PLANE 2
+            2, 9, 1,    1, 10, 2,    // PLANE 3
+            4, 9, 7,    7, 10, 4,    // PLANE 4
+            4, 11, 7,   7, 8, 4,     // PLANE 5
+        
+            4, 5, 7,    7, 6, 4,     // PLANE 6
+            5, 1, 6,    6, 2, 5,     // PLANE 7
+            1, 8, 2,    2, 11, 1,    // PLANE 8
+            3, 4, 0,    0, 7, 3,     // PLANE 9
+        
+            5, 0, 6,    6, 3, 5,     // PLANE 10
+            0, 10, 3,   3, 9, 0,     // PLANE 11
+            2, 4, 1,    1, 7, 2,     // PLANE 12
+        
+            8, 10, 11,  11, 9, 8,    // PLANE 13
+            10, 6, 9,   9, 5, 10,    // PLANE 14
+        
+            5, 8, 6,    6, 11, 5,    // PLANE 15
+        ];
+
+        const planePattern = [
+            0, 1, 2, 2, 3, 0
+        ]
 
         let vertices = planeIndices.slice(6 * number, 6 * (number + 1)); // for UL/UR/LL/LR = B/C/A/D plane, indices for faces in pattern CBA ADC
         let thisPlaneVertices = new Float32Array([
@@ -538,7 +459,7 @@ class MusicalPlane {
         this.geometry.setAttribute('position', new THREE.BufferAttribute( thisPlaneVertices , 3 ));
 
         this.fillMaterial = new THREE.MeshBasicMaterial( {
-            color: color, 
+            color: user.color, 
             side: THREE.DoubleSide, 
             polygonOffset: true,
             polygonOffsetFactor: 1, 
@@ -549,7 +470,7 @@ class MusicalPlane {
         this.fillMaterial.opacity = 0;
 
         this.lineMaterial = new LineMaterial( {
-            color: color,
+            color: user.color,
             linewidth: 2,
             depthTest: false
         } );
@@ -600,8 +521,8 @@ class MusicalPlane {
             } else if(this.trueOpacity + increment <= 0) {
                 this.trueOpacity = 0;
                 this.process = null;
-                this.lineMaterial.color.set(thisUser.color);
-                this.fillMaterial.color.set(thisUser.color);
+                this.lineMaterial.color.set(this.user.color);
+                this.fillMaterial.color.set(this.user.color);
             } else {
                 this.trueOpacity += increment;
             }
@@ -649,12 +570,22 @@ class MusicalPlane {
 }
 
 class Icosatone {
-    constructor() {
+    constructor(user, recorder) {
+        this.user = user;
+        this.recorder = recorder;
+
         this.planes = new Array(15);
         this.selectedPlane = null;
         
         this.rotationLocked = false;
         this.planeLocked = false;
+
+        const icoIndices = [
+            0, 11, 5, 	0, 5, 1, 	0, 1, 7, 	0, 7, 10, 	0, 10, 11,
+            1, 5, 9, 	5, 11, 4,	11, 10, 2,	10, 7, 6,	7, 1, 8,
+            3, 9, 4, 	3, 4, 2,	3, 2, 6,	3, 6, 8,	3, 8, 9,
+            4, 9, 5, 	2, 4, 11,	6, 2, 10,	8, 6, 7,	9, 8, 1
+        ];
 
         let geometry = new THREE.BufferGeometry();
         geometry.setIndex(icoIndices);
@@ -672,7 +603,7 @@ class Icosatone {
 
     initPlanes() {
         for(let i = 0; i < 15; i++) {
-            this.planes[i] = new MusicalPlane(i, thisUser.color)
+            this.planes[i] = new MusicalPlane(i, this.user)
         }
     }
     
@@ -740,74 +671,21 @@ class Icosatone {
     bow(planeNum, user) {
         this.planeLocked = true;
         this.planes[planeNum].bow(user);
-        if(recordPlayer.isRecording) {
-            recordPlayer.recordStroke('bow', planeNum, user.id);
+        if(this.recorder.isRecording) {
+            this.recorder.recordStroke('bow', planeNum, user.id);
         }
     }
 
     unbow(planeNum, user) {
         this.planeLocked = false;
         this.planes[planeNum].unbow(user);
-        if(recordPlayer.isRecording) {
-            recordPlayer.recordStroke('unbow', planeNum, user.id);
+        if(this.recorder.isRecording) {
+            this.recorder.recordStroke('unbow', planeNum, user.id);
         }
     }
 
     unbowAll(user) {
 
-    }
-}
-
-class UserSampler {
-    constructor(color, id) {
-        this.sampler = new Tone.Sampler({
-            "A3": "samples/A3.mp3",
-        }).toDestination();
-        this.color = color;
-        this.soundLoops = new Array(15);
-        this.soundTimeout = null;
-        this.id = id;
-
-        this.initSampler();
-    }
-
-    initSampler() {
-        const vibrato = new Tone.Vibrato({
-            maxDelay : 0.005 ,
-            frequency : 1 ,
-            depth : 0.2
-        }).toDestination();
-            
-        const reverb = new Tone.Reverb({
-            decay: 5
-        }).toDestination();
-        
-        this.sampler.release = 0.6;
-        this.sampler.volume.value = -20;
-        this.sampler.connect(vibrato);
-        this.sampler.connect(reverb);
-
-        for(let i = 0; i < 15; i++) {
-            this.soundLoops[i] = new Tone.Loop((time)=> {
-                this.sampler.triggerAttack(chords[i].pitches);
-            }, 1);
-        }
-    }
-
-    play(chordNum) {
-        clearInterval(this.soundTimeout);
-        let now = Tone.now();
-        this.soundLoops[chordNum].start(now);
-        this.sampler.triggerAttack(chords[chordNum].pitches);
-        this.soundTimeout = setTimeout(()=>{this.sampler.triggerAttack(chords[chordNum].pitches)}, 250);
-    }
-
-    stop(chordNum) {
-        clearTimeout(this.soundTimeout);
-        let now = Tone.now();
-        this.soundLoops[chordNum].stop(now);
-        this.sampler.triggerRelease(chords[chordNum].pitches);
-        this.soundTimeout = setInterval(()=>{this.sampler.triggerRelease(chords[chordNum].pitches)}, 10);
     }
 }
 
@@ -873,14 +751,14 @@ class RecordPlayer {
         for(let strokes of this.player[this.currentFrame]) {
             switch (strokes.stroke) {
                 case 'bow':
-                    icosatone.bow(stroke.planeNum, stroke.id);
+                    this.instrument.bow(stroke.planeNum, stroke.id);
                     break;
                 case 'unbow':
-                    icosatone.unbow(stroke.planeNum, stroke.id);
+                    this.instrument.unbow(stroke.planeNum, stroke.id);
                     break;
                 case 'unbowAll':
                     for(let i = 0; i < 15; i++) {
-                        icosatone.unbow(i, stroke.id);
+                        this.instrument.unbow(i, stroke.id);
                     }
                     break;
             }
@@ -901,5 +779,124 @@ class RecordPlayer {
                 this.stopPlaying();
             }
         }
+    }
+}
+
+class UserSampler {
+    constructor(color, id) {
+        this.sampler = new Tone.Sampler({
+            "A3": "samples/A3.mp3",
+        }).toDestination();
+        this.color = color;
+        this.soundLoops = new Array(15);
+        this.soundTimeout = null;
+        this.id = id;
+
+        this.initSampler();
+    }
+
+    initSampler() {
+        const vibrato = new Tone.Vibrato({
+            maxDelay : 0.005 ,
+            frequency : 1 ,
+            depth : 0.2
+        }).toDestination();
+            
+        const reverb = new Tone.Reverb({
+            decay: 5
+        }).toDestination();
+        
+        this.sampler.release = 0.6;
+        this.sampler.volume.value = -20;
+        this.sampler.connect(vibrato);
+        this.sampler.connect(reverb);
+
+        for(let i = 0; i < 15; i++) {
+            this.soundLoops[i] = new Tone.Loop((time)=> {
+                this.sampler.triggerAttack(chords[i].pitches);
+            }, 1);
+        }
+    }
+
+    play(chordNum) {
+        clearInterval(this.soundTimeout);
+        let now = Tone.now();
+        this.soundLoops[chordNum].start(now);
+        this.sampler.triggerAttack(chords[chordNum].pitches);
+        this.soundTimeout = setTimeout(()=>{this.sampler.triggerAttack(chords[chordNum].pitches)}, 250);
+    }
+
+    stop(chordNum) {
+        clearTimeout(this.soundTimeout);
+        let now = Tone.now();
+        this.soundLoops[chordNum].stop(now);
+        this.sampler.triggerRelease(chords[chordNum].pitches);
+        this.soundTimeout = setInterval(()=>{this.sampler.triggerRelease(chords[chordNum].pitches)}, 10);
+    }
+}
+
+class ActiveUser {
+    constructor(color) {
+        this.color = color;
+        this.sampler = new UserSampler(color, -1);
+        this.plane = null;
+        this.sustain = false;
+
+        this.initPlane();
+
+    }
+    initPlane() {
+        const userPlaneVertices = new Float32Array([
+            -1, 0, -1,
+            -1, 0, 1,
+            1, 0, -1,
+            1, 0, 1
+        ]);
+        
+        const userPlaneIndices = [
+            0, 1, 2,    2, 3, 1
+        ];
+
+        let planeGeometry = new THREE.BufferGeometry();
+        planeGeometry.setIndex(userPlaneIndices);
+        planeGeometry.setAttribute('position', new THREE.BufferAttribute(userPlaneVertices, 3));
+        let materialColor = this.color;
+
+        let fillMaterial = new THREE.MeshBasicMaterial( {
+            color: materialColor, 
+            side: THREE.DoubleSide, 
+            polygonOffset: true,
+            polygonOffsetFactor: 1, 
+            polygonOffsetUnits: 1,
+            depthTest: false
+        } );
+    
+        fillMaterial.transparent = true;
+        fillMaterial.opacity = 0.5;
+    
+        let planeMesh = new THREE.Mesh(planeGeometry, fillMaterial)
+        
+        this.plane = {
+            mesh: planeMesh,
+            geometry: planeGeometry, 
+            normal: getNormals(planeGeometry, planeMesh),
+        };
+    }
+
+    updatePlane(ev, instrument) {
+        if(instrument.planeLocked) return;
+    
+        let newRotation = [ -1 * (ev.clientX / window.innerWidth - 0.5) * Math.PI, (ev.clientY / window.innerHeight - 0.5) * Math.PI];
+    
+        let magnitude = Math.sqrt(Math.pow(newRotation[0], 2) + Math.pow(newRotation[1], 2))
+        if(magnitude > Math.PI / 2) {
+            newRotation[0] = newRotation[0] / magnitude * Math.PI / 2;
+            newRotation[1] = newRotation[1] / magnitude * Math.PI / 2;
+        }
+    
+        this.plane.mesh.rotation.z = newRotation[0];
+        this.plane.mesh.rotation.x = newRotation[1];
+    
+        this.plane.normal = getNormals(this.plane.geometry, this.plane.mesh);
     }
 }
