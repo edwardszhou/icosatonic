@@ -121,13 +121,14 @@ const icoVertices = new Float32Array([
     t, 0, - 1, 	t, 0, 1, 	- t, 0, - 1, 	- t, 0, 1
 ]);
 
+const FPS = 60;
 let scene, camera, renderer, composer, controls;
 
 let icosatone;
 let thisUser;
 let recordPlayer;
 
-let clients = {};
+let socketClients = {};
 
 let socket;
 
@@ -141,6 +142,7 @@ window.onload = () => {
     icosatone = new Icosatone(thisUser, recordPlayer);
 
     initDOM();
+    initRecorderUI();
     initControls();
     
     socket.emit('new-user', thisUser.color);
@@ -192,19 +194,20 @@ function initSocket() {
     socket = io.connect();
 
     socket.on('new-user', (data) => {
-        clients[data.sid] = new UserSampler(data.color, data.sid) ;
+        socketClients[data.sid] = new UserSampler(data.color, data.sid) ;
     });
 
     socket.on('bow', (data) => {
-        icosatone.bow(data.planeNum, clients[data.sid]);
+        icosatone.bow(data.planeNum, socketClients[data.sid]);
     });
 
     socket.on('unbow', (data) => {
-        icosatone.unbow(data.planeNum, clients[data.sid]);
+        icosatone.unbow(data.planeNum, socketClients[data.sid]);
     });
 
     socket.on('user-disconnect', (data) => {
-        delete clients[data];
+        icosatone.unbowAll(socketClients[data])
+        delete socketClients[data];
     });
 }
 
@@ -212,11 +215,6 @@ function initControls() {
     window.addEventListener('resize', resizeScene);
     window.addEventListener('mousemove', (ev)=> {
         thisUser.updatePlane(ev, icosatone);
-    });
-    window.addEventListener('keydown', (ev)=> {
-        if(ev.key === " ") {
-            recordPlayer.startRecording();
-        }
     });
     window.addEventListener('mousedown', (ev)=> {
         if(ev.button > 1) return;
@@ -255,6 +253,8 @@ function initDOM() {
     
     let samplesHideBtn = document.getElementById('samples-hide-btn');
     let samplesContent = document.getElementById('samples-content');
+    let samplesList = document.getElementById('samples-list');
+
     samplesContent.style.animation = 'fadeIn 1s linear 2.5s forwards';
     setTimeout(()=>{ samplesContent.style.opacity = 1 }, 3500);
 
@@ -280,12 +280,6 @@ function initDOM() {
         }
        
     });
-    hideBtn.addEventListener('mousedown', (ev) => {
-        ev.stopPropagation();
-    });
-    hideBtn.addEventListener('mouseup', (ev) => {
-        ev.stopPropagation();
-    });
 
     samplesHideBtn.addEventListener('mouseenter', () => {
         samplesHideBtn.style.color = color;
@@ -308,21 +302,6 @@ function initDOM() {
        
     });
 
-    samplesHideBtn.addEventListener('mousedown', (ev) => {
-        ev.stopPropagation();
-    });
-    samplesHideBtn.addEventListener('mouseup', (ev) => {
-        ev.stopPropagation();
-    });
-
-    let samplesList = document.getElementById('samples-list');
-    samplesList.addEventListener('mousedown', (ev) => {
-        ev.stopPropagation();
-    });
-    samplesList.addEventListener('mouseup', (ev) => {
-        ev.stopPropagation();
-    });
-
     let newStyles = document.createElement("style");
     newStyles.appendChild(document.createTextNode(`
         #samples-content ::-webkit-scrollbar-thumb:hover { background: ${color}; }
@@ -331,6 +310,7 @@ function initDOM() {
     `));
     document.getElementsByTagName("head")[0].appendChild(newStyles);	
 
+    let recordBtn = document.getElementById('start-recording');
     let recordingProgress = document.getElementById('recording-progress');
     recordingProgress.style.backgroundColor = `${color}`;
     recordingProgress.style.boxShadow = `0 0 40px 8px ${color}`;
@@ -361,6 +341,43 @@ function initDOM() {
     let infoInstructions = document.getElementById('info-instructions');
     infoInstructions.style.animation = 'fadeIn 1s linear 1.5s forwards'
     
+    stopControlPropagation(hideBtn);
+    stopControlPropagation(samplesHideBtn);
+    stopControlPropagation(samplesList);
+    stopControlPropagation(recordBtn);
+}
+
+function initRecorderUI() {
+    let recordBtn = document.getElementById('start-recording');
+    let recordingProgress = document.getElementById('recording-progress');
+    recordBtn.addEventListener('click', ()=> {
+        if(recordPlayer.isPlaying) return;
+        
+        let recordingEndTimeout;
+        if(!recordPlayer.isRecording) {
+            recordingProgress.style.opacity = 0.6;
+            recordPlayer.startRecording();
+        } else {
+            recordPlayer.stopRecording();
+            recordingProgress.style.width = 0;
+            recordingProgress.style.opacity = 0;
+
+            clearTimeout(recordingEndTimeout);
+        }
+    })
+}
+
+function updateRecorderUI () {
+    if(recordPlayer.isRecording) {
+
+        let recordingProgress = document.getElementById('recording-progress');
+
+        if(recordPlayer.currentFrame == 598) {
+            recordingProgress.style.width = 0;
+            recordingProgress.style.opacity = 0;
+        }
+        recordingProgress.style.width = `${ recordPlayer.currentFrame/6 }%`;
+    }
 }
 
 function resizeScene() {
@@ -371,9 +388,12 @@ function resizeScene() {
 }
 
 function animate() {
-    requestAnimationFrame(animate);
+    setTimeout(()=> { requestAnimationFrame(animate); }, 1000/FPS);
+    
     controls.update();
+
     recordPlayer.update();
+    updateRecorderUI();
     
     icosatone.selectPlane(thisUser.plane.normal.toArray());
     icosatone.update();
@@ -389,12 +409,21 @@ function getRandomColor() {
     return `hsl(${num}, 100%, 70%)`;
 }
 
+function stopControlPropagation(element) {
+    element.addEventListener('mousedown', (ev) => {
+        ev.stopPropagation();
+    });
+    element.addEventListener('mouseup', (ev) => {
+        ev.stopPropagation();
+    });
+}
+
 function getNormals(geometry, mesh) {
     geometry.computeVertexNormals();
 
-    const tri = new THREE.Triangle(); // for re-use
-    const indices = new THREE.Vector3(); // for re-use
-    const outNormal = new THREE.Vector3(); // this is the output normal you need
+    const tri = new THREE.Triangle();
+    const indices = new THREE.Vector3(); 
+    const outNormal = new THREE.Vector3();
 
     indices.fromArray(geometry.index.array, 0);
     tri.setFromAttributeAndIndices(geometry.attributes.position,
@@ -539,32 +568,30 @@ class MusicalPlane {
     bow(user) {
         user.play(this.number);
 
-        this.players.push(user);
+        this.players.push({id: user.id, color: user.color});
         this.lineMaterial.color.set(user.color);
         this.fillMaterial.color.set(user.color);
 
         if(this.players.length == 1) this.show();
+        console.log(this.players);
     }
 
     unbow(user) {
 
         user.stop(this.number);
 
-        if(this.players[this.players.length-1] == user) {
-            this.players.pop();
-            if(this.players.length > 0) {
-                let newColor = this.players[this.players.length-1].color;
-                this.lineMaterial.color.set(newColor);
-                this.fillMaterial.color.set(newColor);
-            }
-        } else {
-            let index = this.players.indexOf(user);
-            this.players.splice(index, 1);
-        }
+        this.players = this.players.filter(userObj => userObj.id != user.id);
 
         if(this.players.length == 0) {
             this.hide();
+        } else {
+            let newColor = this.players[this.players.length-1].color;
+            this.lineMaterial.color.set(newColor);
+            this.fillMaterial.color.set(newColor);
+
         }
+        
+        console.log(this.players);
     }
 
 }
@@ -625,7 +652,7 @@ class Icosatone {
 
     update() {
         if(!this.rotationLocked) {
-            this.rotate(0, 0.002, 0);
+            this.rotate(0, 0.003, 0);
         }
         this.lineMaterial.resolution.set( window.innerWidth, window.innerHeight );
 
@@ -669,7 +696,10 @@ class Icosatone {
     }
 
     bow(planeNum, user) {
-        this.planeLocked = true;
+        if(user.id == -1) {
+            this.planeLocked = true;
+        }
+    
         this.planes[planeNum].bow(user);
         if(this.recorder.isRecording) {
             this.recorder.recordStroke('bow', planeNum, user.id);
@@ -677,7 +707,10 @@ class Icosatone {
     }
 
     unbow(planeNum, user) {
-        this.planeLocked = false;
+        if(user.id == -1) {
+            this.planeLocked = false;
+        }
+
         this.planes[planeNum].unbow(user);
         if(this.recorder.isRecording) {
             this.recorder.recordStroke('unbow', planeNum, user.id);
@@ -685,7 +718,9 @@ class Icosatone {
     }
 
     unbowAll(user) {
-
+        for(let plane of this.planes) {
+            plane.unbow(user);
+        }
     }
 }
 
@@ -722,7 +757,7 @@ class RecordPlayer {
         if(this.isPlaying) throw new Error(`failed to end recording: isRecording = ${this.isRecording}, isPlaying = ${this.isPlaying}`);
 
         for(let user of this.recordedUsers) {
-            this.recorder[599].push({stroke: 'unbowAll', id: user + "_instance"});
+            this.recorder[this.currentFrame].push({stroke: 'unbowAll', id: user + "_instance"});
         }
 
         this.recordedUsers.clear();
@@ -772,7 +807,7 @@ class RecordPlayer {
 
         this.currentFrame++;
 
-        if(this.currentFrame == 600) {
+        if(this.currentFrame == 599) {
             if(this.isRecording) {
                 this.stopRecording();
             } else {
