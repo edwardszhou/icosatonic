@@ -559,8 +559,10 @@ class MusicalPlane {
 
         if(this.selected) {
             this.lineMaterial.opacity = 1;
+            this.lineMaterial.color.set(this.user.color);
         } else {
             this.lineMaterial.opacity = this.trueOpacity;
+            this.lineMaterial.color.set(this.fillMaterial.color);
         }
         this.fillMaterial.opacity = this.trueOpacity / 4;
     }
