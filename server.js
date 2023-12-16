@@ -10,8 +10,8 @@ var http = require('http');
 
 var httpServer = http.createServer(app);
 
-httpServer.listen(8000, () => {
-    console.log('server has started on port 8000')
+httpServer.listen(8080, () => {
+    console.log('server has started on port 8080')
 })
 
 let users = [];
