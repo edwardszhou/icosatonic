@@ -205,6 +205,19 @@ function initSocket() {
         icosatone.unbow(data.planeNum, socketClients[data.sid]);
     });
 
+    socket.on('new-recording', (data) => {
+        data.htmlElement = createRecordingElement(data.name);
+        recordPlayer.recordingAlbum.push(data);
+        if(recordPlayer.recordingAlbum.length > 15) {
+            console.log(recordPlayer.recordingAlbum[0]);
+            recordPlayer.recordingAlbum[0].htmlElement.remove();
+            recordPlayer.recordingAlbum.shift();
+        }
+    });
+
+    socket.on('pop-recording', () => {
+    });
+
     socket.on('user-disconnect', (data) => {
         icosatone.unbowAll(socketClients[data])
         delete socketClients[data];
@@ -306,7 +319,8 @@ function initDOM() {
     newStyles.appendChild(document.createTextNode(`
         #samples-content ::-webkit-scrollbar-thumb:hover { background: ${color}; }
         #start-recording:hover { box-shadow: 0 0 40px 0px ${color}; }
-        .play-btn { color: ${color}; }
+        .play-btn { color: ${color}; text-shadow: 0 0 15px ${color}; }
+        .play-progress { box-shadow: 0 0 10px 0px ${color}; border-color: ${color}; }
     `));
     document.getElementsByTagName("head")[0].appendChild(newStyles);	
 
@@ -314,21 +328,6 @@ function initDOM() {
     let recordingProgress = document.getElementById('recording-progress');
     recordingProgress.style.backgroundColor = `${color}`;
     recordingProgress.style.boxShadow = `0 0 40px 8px ${color}`;
-
-    for(let recording of document.getElementsByClassName('sample-recording')) {
-        let playBtn = recording.querySelector('.play-btn');
-        let playProgress = recording.querySelector('hr');
-        playProgress.style.boxShadow = `0 0 10px 0px ${color}`;
-        playProgress.style.borderColor = color;
-        playBtn.style.textShadow = `0 0 15px ${color}`
-        recording.addEventListener('mouseenter', ()=> {
-            playBtn.style.opacity = 1;
-        })
-        recording.addEventListener('mouseleave', ()=> {
-            playBtn.style.opacity = 0;
-        })
-    };
-    
 
     let infoSeparator = document.getElementById('info-separator');
     infoSeparator.style.boxShadow = `0 0 50px 8px ${color}`;
@@ -401,14 +400,6 @@ function animate() {
     composer.render();
 }
 
-function getRandomColor() {
-    let num = Math.floor(Math.random() * 361);
-    while(num < 260 && num > 225) {
-        num = Math.floor(Math.random() * 361)
-    }
-    return `hsl(${num}, 100%, 70%)`;
-}
-
 function stopControlPropagation(element) {
     element.addEventListener('mousedown', (ev) => {
         ev.stopPropagation();
@@ -416,6 +407,43 @@ function stopControlPropagation(element) {
     element.addEventListener('mouseup', (ev) => {
         ev.stopPropagation();
     });
+}
+
+function createRecordingElement(name) {
+    let container = document.createElement('div');
+    let recordingName = document.createElement('p');
+    let playBtn = document.createElement('span');
+    let progressBar = document.createElement('hr');
+    let samplesList = document.getElementById('samples-list');
+    
+    progressBar.className = 'play-progress';
+    playBtn.innerText = '\u25B6';
+    playBtn.className = 'play-btn';
+    recordingName.innerText = name;
+    container.className = 'sample-recording';
+    
+    container.appendChild(recordingName);
+    container.appendChild(playBtn);
+    container.appendChild(progressBar);
+
+    container.addEventListener('mouseenter', ()=> {
+        playBtn.style.opacity = 1;
+    })
+    container.addEventListener('mouseleave', ()=> {
+        playBtn.style.opacity = 0;
+    })
+
+    samplesList.insertBefore(container, samplesList.firstChild);
+
+    return container;
+}
+
+function getRandomColor() {
+    let num = Math.floor(Math.random() * 361);
+    while(num < 260 && num > 225) {
+        num = Math.floor(Math.random() * 361)
+    }
+    return `hsl(${num}, 100%, 70%)`;
 }
 
 function getNormals(geometry, mesh) {
@@ -730,6 +758,7 @@ class RecordPlayer {
     constructor() {
         this.recorder = null;
         this.recordedUsers = new Set();
+        this.recordingAlbum = [];
 
         this.player = null;
 
@@ -766,7 +795,8 @@ class RecordPlayer {
         this.isRecording = false;
         console.log(this.recorder);
         console.log('recording ended');
-        // send to socket server;
+        
+        socket.emit('new-recording', this.recorder);
     }
 
     startPlaying(recording) {
