@@ -194,6 +194,8 @@ function initScene() {
     controls.mouseButtons = {
         RIGHT: THREE.MOUSE.ROTATE
     }
+    controls.minPolarAngle = Math.PI/2 - 0.18;
+    controls.maxPolarAngle = Math.PI/2 - 0.18;
 
     document.body.appendChild(renderer.domElement)
 }
@@ -407,7 +409,9 @@ function updateRecorder () {
         if(recordPlayer.currentFrame == 599) {
             playbackProgress.style.width = 0;
             playbackProgress.style.opacity = 0;
-            recordingObj.htmlElement.querySelector('.play-btn').textContent = '\u25B6'
+            let playBtn = recordingObj.htmlElement.querySelector('.play-btn');
+            playBtn.textContent = '\u25B6'
+            playBtn.style.opacity = 0;
         }
 
         playbackProgress.style.width = `${ recordPlayer.currentFrame/6 }%`;
@@ -479,20 +483,22 @@ function createRecordingElement(name, id) {
         if(recordPlayer.isRecording || ( recordPlayer.isPlaying && recordPlayer.playback.timeCreated != id)) return;
 
         if(recordPlayer.isPlaying) {
-            console.log(`stopped playing ${name}`);
+            // console.log(`stopped playing ${name}`);
 
             for(let user in recordPlayer.playback.userSamplers) {
                 icosatone.unbowAll(recordPlayer.playback.userSamplers[user]);
             }
 
             let htmlElement = recordPlayer.playback.htmlElement;
-            htmlElement.querySelector('hr').style.opacity = 0;
-            htmlElement.querySelector('hr').style.width = 0;
-            htmlElement.querySelector('.play-btn').textContent = '\u25B6'
+            let playbackProgress = htmlElement.querySelector('hr')
+            playbackProgress.style.opacity = 0;
+            playbackProgress.style.width = 0;
+            let playBtn = htmlElement.querySelector('.play-btn')
+            playBtn.textContent = '\u25B6'
             
             recordPlayer.stopPlaying(id);
         } else {
-            console.log(`started playing ${name}`);
+            // console.log(`started playing ${name}`);
             recordPlayer.startPlaying(id);
 
             let htmlElement = recordPlayer.playback.htmlElement;
@@ -673,7 +679,6 @@ class MusicalPlane {
         this.fillMaterial.color.set(user.color);
 
         if(this.players.length == 1) this.show();
-        // console.log(this.players);
     }
 
     unbow(user) {
@@ -691,7 +696,6 @@ class MusicalPlane {
 
         }
         
-        // console.log(this.players);
     }
 
 }
@@ -861,7 +865,7 @@ class RecordPlayer {
 
         if(this.recordedUsers.size == 0) {
             this.isRecording = false;
-            console.log('recording was empty');
+            alert('Recording empty, not saved');
             return;
         }
 
@@ -873,9 +877,6 @@ class RecordPlayer {
 
         this.recordedUsers.clear();
         this.isRecording = false;
-
-        console.log('recording ended');
-        
         
     }
 
