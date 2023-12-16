@@ -7,8 +7,10 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
 
 const scale = {
     C3: 130.81,
@@ -122,7 +124,7 @@ const icoVertices = new Float32Array([
 ]);
 
 const FPS = 60;
-let scene, camera, renderer, composer, controls;
+let scene, camera, renderer, composer, controls, fxaaPass;
 
 let icosatone;
 let thisUser;
@@ -140,6 +142,7 @@ window.onload = () => {
     thisUser = new ActiveUser(getRandomColor());
     recordPlayer = new RecordPlayer();
     icosatone = new Icosatone(thisUser, recordPlayer);
+    recordPlayer.instrument = icosatone;
 
     initDOM();
     initRecorderUI();
@@ -176,6 +179,11 @@ function initScene() {
     const outputPass = new OutputPass();
     composer.addPass(outputPass);
 
+    fxaaPass = new ShaderPass( FXAAShader );
+    const pixelRatio = renderer.getPixelRatio();
+    fxaaPass.material.uniforms[ 'resolution' ].value.x = 1 / ( window.innerWidth * pixelRatio );
+    fxaaPass.material.uniforms[ 'resolution' ].value.y = 1 / ( window.innerHeight * pixelRatio );
+    composer.addPass(fxaaPass);
 
     controls.update();
     controls.enableDamping = true; // an animation loop is required when either damping or auto-rotation are enabled
@@ -206,26 +214,30 @@ function initSocket() {
     });
 
     socket.on('new-recording', (data) => {
+
+        data.userSamplers = {}
+        // rewrite data.recordedUsers with UserSampler objs
+        for(let i = 0; i < data.recordedUsers.length; i++) {
+            let samplerName = data.recordedUsers[i] + "_instance"
+            data.userSamplers[samplerName] = new UserSampler(0xAAAAAA,  samplerName);
+        }
+
         recordPlayer.recordingAlbum.push(data);
         if(recordPlayer.recordingAlbum.length > 15) {
-            console.log(recordPlayer.recordingAlbum[0]);
             recordPlayer.recordingAlbum[0].htmlElement.remove();
             recordPlayer.recordingAlbum.shift();
+        }
 
-            for(let element of document.getElementsByClassName('sample-recording')) {
-                element.style.animation = "slideDown 0.5s ease forwards";
-            }
+        for(let element of document.getElementsByClassName('sample-recording')) {
+            element.style.animation = "slideDown 0.5s ease forwards";
         }
 
         setTimeout(()=>{
             for(let element of document.getElementsByClassName('sample-recording')) {
                 element.style.animation = "none";
             }
-            data.htmlElement = createRecordingElement(data.name);
+            data.htmlElement = createRecordingElement(data.name, data.timeCreated);
         }, 500);
-    });
-
-    socket.on('pop-recording', () => {
     });
 
     socket.on('user-disconnect', (data) => {
@@ -362,30 +374,43 @@ function initRecorderUI() {
     recordBtn.addEventListener('click', ()=> {
         if(recordPlayer.isPlaying) return;
         
-        let recordingEndTimeout;
         if(!recordPlayer.isRecording) {
             recordingProgress.style.opacity = 0.6;
             recordPlayer.startRecording();
+            recordBtn.textContent = "Save";
         } else {
             recordPlayer.stopRecording();
             recordingProgress.style.width = 0;
             recordingProgress.style.opacity = 0;
-
-            clearTimeout(recordingEndTimeout);
+            recordBtn.textContent = "Record";
         }
     })
 }
 
-function updateRecorderUI () {
+function updateRecorder () {
     if(recordPlayer.isRecording) {
 
         let recordingProgress = document.getElementById('recording-progress');
 
-        if(recordPlayer.currentFrame == 598) {
+        if(recordPlayer.currentFrame == 599) {
             recordingProgress.style.width = 0;
             recordingProgress.style.opacity = 0;
+            document.getElementById('start-recording').textContent = "Record";
         }
         recordingProgress.style.width = `${ recordPlayer.currentFrame/6 }%`;
+    }
+
+    else if(recordPlayer.isPlaying) {
+        let recordingObj = recordPlayer.playback;
+        let playbackProgress = recordingObj.htmlElement.querySelector('hr');
+
+        if(recordPlayer.currentFrame == 599) {
+            playbackProgress.style.width = 0;
+            playbackProgress.style.opacity = 0;
+            recordingObj.htmlElement.querySelector('.play-btn').textContent = '\u25B6'
+        }
+
+        playbackProgress.style.width = `${ recordPlayer.currentFrame/6 }%`;
     }
 }
 
@@ -394,6 +419,11 @@ function resizeScene() {
     camera.updateProjectionMatrix();
 
     renderer.setSize( window.innerWidth, window.innerHeight );
+    composer.setSize( window.innerWidth, window.innerHeight );
+
+    const pixelRatio = renderer.getPixelRatio();
+    fxaaPass.material.uniforms[ 'resolution' ].value.x = 1 / ( window.innerWidth * pixelRatio );
+    fxaaPass.material.uniforms[ 'resolution' ].value.y = 1 / ( window.innerHeight * pixelRatio );
 }
 
 function animate() {
@@ -402,7 +432,7 @@ function animate() {
     controls.update();
 
     recordPlayer.update();
-    updateRecorderUI();
+    updateRecorder();
     
     icosatone.selectPlane(thisUser.plane.normal.toArray());
     icosatone.update();
@@ -419,7 +449,7 @@ function stopControlPropagation(element) {
     });
 }
 
-function createRecordingElement(name) {
+function createRecordingElement(name, id) {
     let container = document.createElement('div');
     let recordingName = document.createElement('p');
     let playBtn = document.createElement('span');
@@ -437,11 +467,41 @@ function createRecordingElement(name) {
     container.appendChild(progressBar);
 
     container.addEventListener('mouseenter', ()=> {
+        if(recordPlayer.isPlaying || recordPlayer.isRecording) return;
         playBtn.style.opacity = 1;
-    })
+    });
     container.addEventListener('mouseleave', ()=> {
+        if(recordPlayer.isPlaying || recordPlayer.isRecording) return;
         playBtn.style.opacity = 0;
-    })
+    });
+
+    container.addEventListener('click', ()=> {
+        if(recordPlayer.isRecording || ( recordPlayer.isPlaying && recordPlayer.playback.timeCreated != id)) return;
+
+        if(recordPlayer.isPlaying) {
+            console.log(`stopped playing ${name}`);
+
+            for(let user in recordPlayer.playback.userSamplers) {
+                icosatone.unbowAll(recordPlayer.playback.userSamplers[user]);
+            }
+
+            let htmlElement = recordPlayer.playback.htmlElement;
+            htmlElement.querySelector('hr').style.opacity = 0;
+            htmlElement.querySelector('hr').style.width = 0;
+            htmlElement.querySelector('.play-btn').textContent = '\u25B6'
+            
+            recordPlayer.stopPlaying(id);
+        } else {
+            console.log(`started playing ${name}`);
+            recordPlayer.startPlaying(id);
+
+            let htmlElement = recordPlayer.playback.htmlElement;
+            htmlElement.querySelector('hr').style.opacity = 1;
+            htmlElement.querySelector('.play-btn').textContent = '\u23F9'
+        }
+
+
+    });
 
     samplesList.insertBefore(container, samplesList.firstChild);
 
@@ -613,7 +673,7 @@ class MusicalPlane {
         this.fillMaterial.color.set(user.color);
 
         if(this.players.length == 1) this.show();
-        console.log(this.players);
+        // console.log(this.players);
     }
 
     unbow(user) {
@@ -631,7 +691,7 @@ class MusicalPlane {
 
         }
         
-        console.log(this.players);
+        // console.log(this.players);
     }
 
 }
@@ -770,11 +830,13 @@ class RecordPlayer {
         this.recordedUsers = new Set();
         this.recordingAlbum = [];
 
-        this.player = null;
+        this.playback = null;
 
         this.currentFrame = 0;
         this.isRecording = false;
         this.isPlaying = false;
+
+        this.instrument = null;
     }
 
     recordStroke(stroke, planeNum, uid) {
@@ -797,22 +859,40 @@ class RecordPlayer {
     stopRecording() {
         if(this.isPlaying) throw new Error(`failed to end recording: isRecording = ${this.isRecording}, isPlaying = ${this.isPlaying}`);
 
+        if(this.recordedUsers.size == 0) {
+            this.isRecording = false;
+            console.log('recording was empty');
+            return;
+        }
+
         for(let user of this.recordedUsers) {
             this.recorder[this.currentFrame].push({stroke: 'unbowAll', id: user + "_instance"});
         }
 
+        socket.emit('new-recording', [this.recorder, [...this.recordedUsers]]);
+
         this.recordedUsers.clear();
         this.isRecording = false;
-        console.log(this.recorder);
+
         console.log('recording ended');
         
-        socket.emit('new-recording', this.recorder);
+        
     }
 
-    startPlaying(recording) {
+    startPlaying(id) {
         if(this.isRecording || this.isPlaying) throw new Error(`failed to start playing: isRecording = ${this.isRecording}, isPlaying = ${this.isPlaying}`);
 
-        this.player = recording;
+        let recordingNum = null;
+        for(let i = 0; i < this.recordingAlbum.length; i++) {
+            if(this.recordingAlbum[i].timeCreated == id) {
+                recordingNum = i;
+                break;
+            }
+        }
+
+        if(recordingNum == null) throw new Error(`failed to start playing: recording not found`);
+
+        this.playback = this.recordingAlbum[recordingNum];
         this.currentFrame = 0;
         this.isPlaying = true;
     }
@@ -820,24 +900,21 @@ class RecordPlayer {
     stopPlaying() {
         if(this.isRecording) throw new Error(`failed to stop playing: isRecording = ${this.isRecording}, isPlaying = ${this.isPlaying}`);
 
-        this.player = null;
+        this.playback = null;
         this.isPlaying = false;
     }
 
     updatePlayer() {
-        for(let strokes of this.player[this.currentFrame]) {
-            switch (strokes.stroke) {
+        for(let stroke of this.playback.recording[this.currentFrame]) {
+            switch (stroke.stroke) {
                 case 'bow':
-                    this.instrument.bow(stroke.planeNum, stroke.id);
+                    this.instrument.bow(stroke.planeNum, this.playback.userSamplers[stroke.id]);
                     break;
                 case 'unbow':
-                    this.instrument.unbow(stroke.planeNum, stroke.id);
+                    this.instrument.unbow(stroke.planeNum, this.playback.userSamplers[stroke.id]);
                     break;
                 case 'unbowAll':
-                    for(let i = 0; i < 15; i++) {
-                        this.instrument.unbow(i, stroke.id);
-                    }
-                    break;
+                    this.instrument.unbowAll(this.playback.userSamplers[stroke.id]);
             }
         }
     }
@@ -849,7 +926,8 @@ class RecordPlayer {
 
         this.currentFrame++;
 
-        if(this.currentFrame == 599) {
+        if(this.currentFrame == 600) {
+            this.currentFrame--;
             if(this.isRecording) {
                 this.stopRecording();
             } else {

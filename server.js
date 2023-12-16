@@ -49,14 +49,16 @@ io.sockets.on('connection',
 
 		socket.on('new-recording', (recording) => {
 			let recordingObj = {
-				recording: recording,
+				recording: recording[0],
+				recordedUsers: recording[1],
 				sid: socket.id,
 				timeCreated: Date.now(),
 				name: new Date().toISOString().replace(/[TZ]/g, ' ').slice(0, -5) // name is date in specific format
 			}
+			
 			recordingsdb.insert(recordingObj, (err, newRec) => {
 				if(err) console.log(err);
-				else console.log(`inserted ${newRec}`);
+				else console.log(`inserted ${JSON.stringify(newRec)}`);
 			})
 
 			let idToRemove;
