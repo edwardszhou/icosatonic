@@ -206,13 +206,23 @@ function initSocket() {
     });
 
     socket.on('new-recording', (data) => {
-        data.htmlElement = createRecordingElement(data.name);
         recordPlayer.recordingAlbum.push(data);
         if(recordPlayer.recordingAlbum.length > 15) {
             console.log(recordPlayer.recordingAlbum[0]);
             recordPlayer.recordingAlbum[0].htmlElement.remove();
             recordPlayer.recordingAlbum.shift();
+
+            for(let element of document.getElementsByClassName('sample-recording')) {
+                element.style.animation = "slideDown 0.5s ease forwards";
+            }
         }
+
+        setTimeout(()=>{
+            for(let element of document.getElementsByClassName('sample-recording')) {
+                element.style.animation = "none";
+            }
+            data.htmlElement = createRecordingElement(data.name);
+        }, 500);
     });
 
     socket.on('pop-recording', () => {

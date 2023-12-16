@@ -29,6 +29,11 @@ body {
 	to { right: 5%; }
 }
 
+@keyframes slideDown {
+    from { transform: translateY(0); }
+    to { transform: translateY(3.8em); }
+}
+
 @keyframes extend {
     from {
         width: 0%;
@@ -74,6 +79,8 @@ body {
 
 #samples-heading {
     justify-content: flex-start;
+    align-items: flex-start;
+    height: 10%;
 }
 
 #info-title {
@@ -138,10 +145,10 @@ body {
 }
 #samples-list {
     width: 80%;
-    flex-grow: 1;
+    height: 72%;
+    margin-top: 15%;
     border-right: solid 1px white;
     overflow: auto;
-    transition-duration: 0.5s;
 }
 
 #samples-content ::-webkit-scrollbar {
@@ -160,15 +167,15 @@ body {
 
 .sample-recording {
     width: 100%;
-    margin: 0 0 15% 0;
+    height: 2.3em;
+    margin: 0 0 1.5em 0;
     padding: 0;
     font-size: 1.6vmin;
     position: relative;
 
-    opacity: 0;
-    animation: fadeIn 1s linear 0.5s forwards;
+    opacity: 1;
+    animation: fadeIn 1s linear forwards;
 
-    transition-duration: 0.5s;
     cursor: pointer;
 }
 .sample-recording p {
@@ -194,8 +201,7 @@ body {
 
 #samples-controls {
     width: 80%;
-    height: 12vmin;
-    margin: 5% 0 12% 0;
+    height: 10%;
     border: solid white 1px;
     background-color: transparent;
     color: white;
