@@ -18,7 +18,8 @@ CDEG - DEGA - EGAC - GACD - ACDE
 2. F major pentatonic - 5 variations (1 repeat)
 FGAC - GACD - ACDF - CDFG - DFGA
 3. G major pentatonic - 5 variation (1 repeat)
-GABD - ABDE - BDEG - DEGA - EGAB  
+GABD - ABDE - BDEG - DEGA - EGAB
+
 Octave will be default center on the piano, sound produced will sample violin or cello using Tone.js. Volume will be controlled by user interaction.
 
 ---
