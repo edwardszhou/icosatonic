@@ -12,6 +12,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
 
+// Frequencies of center octave of scale
 const scale = {
     C3: 130.81,
     D3: 146.83,
@@ -22,6 +23,7 @@ const scale = {
     B3: 246.94
 }
 
+// Chords associted with icosatone, including plane number, freqs, pitches, and chord
 const chords = [
     {
         plane: 1,
@@ -115,6 +117,7 @@ const chords = [
     },
 ]
 
+// icosahedron vertices location array
 const t = ( 1 + Math.sqrt( 5 ) ) / 2;
 
 const icoVertices = new Float32Array([
@@ -130,6 +133,10 @@ let icosatone;
 let thisUser;
 let recordPlayer;
 
+/*
+Stores active clients and associated UserSampler object
+key: socket id, value: UserSampler object
+ */
 let socketClients = {};
 
 let socket;
@@ -151,42 +158,51 @@ window.onload = () => {
     socket.emit('new-user', thisUser.color);
 
     Tone.loaded().then(()=> {
-        Tone.Transport.start();
+        Tone.Transport.start(); // starts Tone.js innter time
     });
 
     animate();
 
 }
 
+/**
+ * Initializes scene in Three.js, including controls, renderer and postprocessing
+ */
 function initScene() {
+
     scene = new THREE.Scene();
-    camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000); // 50 focal length
     renderer = new THREE.WebGLRenderer();
     controls = new OrbitControls( camera, renderer.domElement );
 
+    // Face center of scene looking slightly downward
     camera.position.set(0, 1, 6);
     camera.lookAt(0, 0, 0);
 
+    // set up renderer and composer 
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
     const renderPass = new RenderPass(scene, camera);
     composer = new EffectComposer(renderer);
     composer.addPass(renderPass);
 
+    // controls amount of glow in the scene
     const bloomPass = new UnrealBloomPass( new THREE.Vector2( window.innerWidth, window.innerHeight ), 1, 1.2, 0.28);
     composer.addPass(bloomPass);
 
     const outputPass = new OutputPass();
     composer.addPass(outputPass);
 
+    // sets up anti-aliasing as final pass
     fxaaPass = new ShaderPass( FXAAShader );
     const pixelRatio = renderer.getPixelRatio();
     fxaaPass.material.uniforms[ 'resolution' ].value.x = 1 / ( window.innerWidth * pixelRatio );
     fxaaPass.material.uniforms[ 'resolution' ].value.y = 1 / ( window.innerHeight * pixelRatio );
     composer.addPass(fxaaPass);
 
+    // initializes orbit controls to only rotate (no pan or zoom)
     controls.update();
-    controls.enableDamping = true; // an animation loop is required when either damping or auto-rotation are enabled
+    controls.enableDamping = true; 
     controls.dampingFactor = 0.02;
     controls.enablePan = false;
     controls.enableZoom = false;
@@ -194,42 +210,63 @@ function initScene() {
     controls.mouseButtons = {
         RIGHT: THREE.MOUSE.ROTATE
     }
-    controls.minPolarAngle = Math.PI/2 - 0.18;
+    controls.minPolarAngle = Math.PI/2 - 0.18; // fixes rotation axis
     controls.maxPolarAngle = Math.PI/2 - 0.18;
 
     document.body.appendChild(renderer.domElement)
 }
 
+/**
+ * Connects to socket.io server, wraps socket methods
+ */
 function initSocket() {
     socket = io.connect();
 
+    /**
+     * Creates a new UserSampler per user on the site
+     * @param {object} data user data with .color property and .sid representing socket id
+     */
     socket.on('new-user', (data) => {
         socketClients[data.sid] = new UserSampler(data.color, data.sid) ;
     });
 
+    /**
+     * Bow icosatone whenever another user bows
+     * @param {object} data bow action data indicating which plane to bow and the client source
+     */
     socket.on('bow', (data) => {
         icosatone.bow(data.planeNum, socketClients[data.sid]);
     });
 
+    /**
+     * Unbow icosatone whenever another user unbows
+     * @param {object} data unbow action data indicating which plane to unbow and the client source
+     */
     socket.on('unbow', (data) => {
         icosatone.unbow(data.planeNum, socketClients[data.sid]);
     });
 
+    /**
+     * handle receiving new recording from server, add to client's recorder
+     * @param {object} data Object including recording data, recording users, source socket id, recording id (time created), recording name (ISO date)
+     */
     socket.on('new-recording', (data) => {
 
         data.userSamplers = {}
-        // rewrite data.recordedUsers with UserSampler objs
+        // rewrite data.recordedUsers with UserSampler objs, create new UserSampler per user in recording
         for(let i = 0; i < data.recordedUsers.length; i++) {
             let samplerName = data.recordedUsers[i] + "_instance"
-            data.userSamplers[samplerName] = new UserSampler(0xAAAAAA,  samplerName);
+            data.userSamplers[samplerName] = new UserSampler(0xAAAAAA,  samplerName); // default color is gray
         }
 
+        // adds to record player
         recordPlayer.recordingAlbum.push(data);
-        if(recordPlayer.recordingAlbum.length > 15) {
+        if(recordPlayer.recordingAlbum.length > 15) { // length 15, FIFO
             recordPlayer.recordingAlbum[0].htmlElement.remove();
             recordPlayer.recordingAlbum.shift();
         }
 
+        // animates current recordings downward, then creates new element from recording data
         for(let element of document.getElementsByClassName('sample-recording')) {
             element.style.animation = "slideDown 0.5s ease forwards";
         }
@@ -242,28 +279,37 @@ function initSocket() {
         }, 500);
     });
 
+    /**
+     * Remove user and terminate user actions when user disconnects
+     * @param {string} data socket id of disconnected user
+     */
     socket.on('user-disconnect', (data) => {
         icosatone.unbowAll(socketClients[data])
         delete socketClients[data];
     });
 }
 
+/**
+ * Initializes users control with icosatone instrument via mouse movement and left click
+ */
 function initControls() {
-    window.addEventListener('resize', resizeScene);
-    window.addEventListener('mousemove', (ev)=> {
-        thisUser.updatePlane(ev, icosatone);
-    });
-    window.addEventListener('mousedown', (ev)=> {
-        if(ev.button > 1) return;
+    window.addEventListener('resize', resizeScene); // readjusts scene resolution and info upon window resize
 
-        if(icosatone.planeLocked == true) {
+    window.addEventListener('mousemove', (ev)=> {
+        thisUser.updatePlane(ev, icosatone); // updates user plane upon mouse move
+    });
+    
+    window.addEventListener('mousedown', (ev)=> {
+        if(ev.button > 1) return; // ignore if not left click
+
+        if(icosatone.planeLocked == true) { // if plane was previously locked (user is actively bowing some plane), unlock the plane and unbow
             thisUser.sustain = false;
             icosatone.unbow(icosatone.selectedPlane, thisUser.sampler);
             socket.emit('unbow', icosatone.selectedPlane);
             return;
         }
 
-        if(ev.shiftKey) {
+        if(ev.shiftKey) { // sustain the bow, disable mouseup event
             thisUser.sustain = true;
         }
         
@@ -273,7 +319,7 @@ function initControls() {
     });
 
     window.addEventListener('mouseup', (ev)=> {
-        if(thisUser.sustain || ev.button > 1) return;
+        if(thisUser.sustain || ev.button > 1) return; // ignore if sustaining or not left click
 
         icosatone.unbow(icosatone.selectedPlane, thisUser.sampler);
         socket.emit('unbow', icosatone.selectedPlane);
@@ -282,6 +328,10 @@ function initControls() {
 
 let infoShowing = true, samplesShowing = true;
 
+/**
+ * Initializees all HTML elements with user's random color, initiates CSS animations once page data and scene has loaded
+ * Creates event listeners for HTML DOM elments based on color and user interaction
+ */
 function initDOM() {
     let color = thisUser.color;
 
@@ -305,6 +355,8 @@ function initDOM() {
         hideBtn.style.color = 'darkGray';
         hideBtn.style.textShadow = 'unset';
     });
+
+    // hide/show animation for main info
     hideBtn.addEventListener('click', ()=> {
         if(infoShowing) {
             infoContent.style.animation = 'slideOutLeft 2s ease forwards';
@@ -318,6 +370,7 @@ function initDOM() {
        
     });
 
+    // hide/show animation for samples info
     samplesHideBtn.addEventListener('mouseenter', () => {
         samplesHideBtn.style.color = color;
         samplesHideBtn.style.textShadow = `0 0 5px ${color}`
@@ -339,6 +392,7 @@ function initDOM() {
        
     });
 
+    // Appends new style rules based on the custom user color
     let newStyles = document.createElement("style");
     newStyles.appendChild(document.createTextNode(`
         #samples-content ::-webkit-scrollbar-thumb:hover { background: ${color}; }
@@ -364,12 +418,16 @@ function initDOM() {
     let infoInstructions = document.getElementById('info-instructions');
     infoInstructions.style.animation = 'fadeIn 1s linear 1.5s forwards'
     
+    // disables icosatone interaction when interacting with buttons on the DOM
     stopControlPropagation(hideBtn);
     stopControlPropagation(samplesHideBtn);
     stopControlPropagation(samplesList);
     stopControlPropagation(recordBtn);
 }
 
+/**
+ * Initializes sample record button UI
+ */
 function initRecorderUI() {
     let recordBtn = document.getElementById('start-recording');
     let recordingProgress = document.getElementById('recording-progress');
@@ -389,8 +447,11 @@ function initRecorderUI() {
     })
 }
 
+/**
+ * Updates sampler window DOM depending on status of record player
+ */
 function updateRecorder () {
-    if(recordPlayer.isRecording) {
+    if(recordPlayer.isRecording) { // udpates width of progress bar based on max time for recording
 
         let recordingProgress = document.getElementById('recording-progress');
 
@@ -402,7 +463,7 @@ function updateRecorder () {
         recordingProgress.style.width = `${ recordPlayer.currentFrame/6 }%`;
     }
 
-    else if(recordPlayer.isPlaying) {
+    else if(recordPlayer.isPlaying) { // updates width of recording progress and play/stop btn
         let recordingObj = recordPlayer.playback;
         let playbackProgress = recordingObj.htmlElement.querySelector('hr');
 
@@ -418,6 +479,9 @@ function updateRecorder () {
     }
 }
 
+/**
+ * Helper function to update scene variables, camera aspect ratio, post processing resolutio
+ */
 function resizeScene() {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
@@ -430,20 +494,29 @@ function resizeScene() {
     fxaaPass.material.uniforms[ 'resolution' ].value.y = 1 / ( window.innerHeight * pixelRatio );
 }
 
+/**
+ * Wrapper animation function, updates individual aspects of scene/DOM capped at max FPS rate
+ */
 function animate() {
-    setTimeout(()=> { requestAnimationFrame(animate); }, 1000/FPS);
+    setTimeout(()=> { requestAnimationFrame(animate); }, 1000/FPS); // limits to max FPS
     
-    controls.update();
+    controls.update(); // updates OrbitControls
 
     recordPlayer.update();
     updateRecorder();
     
-    icosatone.selectPlane(thisUser.plane.normal.toArray());
+    icosatone.selectPlane(thisUser.plane.normal.toArray()); // adjusts user selected plane
     icosatone.update();
 
     composer.render();
 }
 
+/**
+ * Helper function to disconnect interaction with HTML DOM element from interaction with icosatone
+ * Stops propogation of mousedown and mouseup event
+ * 
+ * @param {HTMLElement} element HTML element to disable controls for
+ */
 function stopControlPropagation(element) {
     element.addEventListener('mousedown', (ev) => {
         ev.stopPropagation();
@@ -453,7 +526,17 @@ function stopControlPropagation(element) {
     });
 }
 
+/**
+ * Creates new HTML element associated with a recording in the sampler
+ * Handles play/pause events of recording
+ * 
+ * @param {string} name name of recording (date ISO format)
+ * @param {number} id id of recording (Date.now())
+ * @returns HTML element of sample-recording created
+ */
 function createRecordingElement(name, id) {
+
+    // initializes HTML elements and assembles into sample-recording
     let container = document.createElement('div');
     let recordingName = document.createElement('p');
     let playBtn = document.createElement('span');
@@ -479,12 +562,14 @@ function createRecordingElement(name, id) {
         playBtn.style.opacity = 0;
     });
 
+    // handle play/stop of recording
     container.addEventListener('click', ()=> {
+        // ignore if recordPlayer is currently performing other action
         if(recordPlayer.isRecording || ( recordPlayer.isPlaying && recordPlayer.playback.timeCreated != id)) return;
 
         if(recordPlayer.isPlaying) {
-            // console.log(`stopped playing ${name}`);
-
+            
+            // stops all recording parts if it is already playing
             for(let user in recordPlayer.playback.userSamplers) {
                 icosatone.unbowAll(recordPlayer.playback.userSamplers[user]);
             }
@@ -498,7 +583,7 @@ function createRecordingElement(name, id) {
             
             recordPlayer.stopPlaying(id);
         } else {
-            // console.log(`started playing ${name}`);
+            // starts new recording if it is not playing
             recordPlayer.startPlaying(id);
 
             let htmlElement = recordPlayer.playback.htmlElement;
@@ -509,19 +594,32 @@ function createRecordingElement(name, id) {
 
     });
 
+    // appends container to HTML body
     samplesList.insertBefore(container, samplesList.firstChild);
 
     return container;
 }
 
+/**
+ * Helper function to generate random HSL color
+ * @returns hsl color string
+ */
 function getRandomColor() {
     let num = Math.floor(Math.random() * 361);
-    while(num < 260 && num > 225) {
+    while(num < 260 && num > 225) { // exclude colors that are too dark to glow
         num = Math.floor(Math.random() * 361)
     }
     return `hsl(${num}, 100%, 70%)`;
 }
 
+/**
+ * Gets the normal vector associated with a plane in THREE.js scene after applying rotation matrix transformations
+ * Used to calculate closeness of planes
+ * 
+ * @param {THREE.BufferGeometry} geometry geometry of target plane
+ * @param {THREE.Mesh} mesh mesh of target plane
+ * @returns THREE.Vector3 representing normal vector of plane
+ */
 function getNormals(geometry, mesh) {
     geometry.computeVertexNormals();
 
@@ -529,6 +627,7 @@ function getNormals(geometry, mesh) {
     const indices = new THREE.Vector3(); 
     const outNormal = new THREE.Vector3();
 
+    // gets normal of triangles associated from geometry
     indices.fromArray(geometry.index.array, 0);
     tri.setFromAttributeAndIndices(geometry.attributes.position,
         indices.x,
@@ -536,6 +635,7 @@ function getNormals(geometry, mesh) {
         indices.z);
     tri.getNormal(outNormal);
 
+    // applies matrix rotation transformations
     outNormal.applyAxisAngle(new THREE.Vector3(1,0,0), mesh.rotation.x);
     outNormal.applyAxisAngle(new THREE.Vector3(0,1,0), mesh.rotation.y);
     outNormal.applyAxisAngle(new THREE.Vector3(0,0,1), mesh.rotation.z);
@@ -543,6 +643,12 @@ function getNormals(geometry, mesh) {
     return(outNormal);
 }
 
+/**
+ * Helper function to get the magnitude of a 3D vector
+ * 
+ * @param {array} vec3Array THREE.Vector3 in array form
+ * @returns 
+ */
 function getMagnitude(vec3Array) {
     return Math.sqrt(vec3Array[0] * vec3Array[0] + vec3Array[1] * vec3Array[1] + vec3Array[2] * vec3Array[2]);
 }

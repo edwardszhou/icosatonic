@@ -14,6 +14,8 @@ httpServer.listen(8080, () => {
     console.log('server has started on port 8080')
 })
 
+
+/* array of objects storing users: {} */
 let users = [];
 
 
