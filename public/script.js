@@ -653,13 +653,23 @@ function getMagnitude(vec3Array) {
     return Math.sqrt(vec3Array[0] * vec3Array[0] + vec3Array[1] * vec3Array[1] + vec3Array[2] * vec3Array[2]);
 }
 
+/**
+ * Representation of a single plane in the Icosatone instrument
+ * Each plane is assigned a unique chord and geometry, as well as a default user (user client)
+ */
 class MusicalPlane {
+    /**
+     * Create new MusicalPlane
+     * 
+     * @param {number} number plane number, determines chord
+     * @param {ActiveUser} user primary user, client
+     */
     constructor(number, user) {
 
         this.user = user;
 
+        // creates new plane geometry based on plane number
         this.geometry = new THREE.BufferGeometry();
-
         const planeIndices = [
             8, 0, 11,   11, 3, 8,    // PLANE 1
             0, 1, 3,    3, 2, 0,     // PLANE 2
@@ -681,11 +691,11 @@ class MusicalPlane {
         
             5, 8, 6,    6, 11, 5,    // PLANE 15
         ];
-
         const planePattern = [
             0, 1, 2, 2, 3, 0
         ]
 
+        // selects vertex indices based on plane number, then gets associated vertices from icosphere vertices
         let vertices = planeIndices.slice(6 * number, 6 * (number + 1)); // for UL/UR/LL/LR = B/C/A/D plane, indices for faces in pattern CBA ADC
         let thisPlaneVertices = new Float32Array([
             ...icoVertices.slice(vertices[0] * 3, vertices[0] * 3 +3),
@@ -697,6 +707,7 @@ class MusicalPlane {
         this.geometry.setIndex(planePattern);
         this.geometry.setAttribute('position', new THREE.BufferAttribute( thisPlaneVertices , 3 ));
 
+        // set up materials and mesh
         this.fillMaterial = new THREE.MeshBasicMaterial( {
             color: user.color, 
             side: THREE.DoubleSide, 
@@ -723,30 +734,44 @@ class MusicalPlane {
         scene.add(this.mesh);
         scene.add(this.wireframe);
 
-        this.number = number;
-        this.process = null;
+        this.number = number; // plane number
+        this.process = null; // stores hiding/showing process
         this.trueOpacity = 0;
         this.selected = false;
         this.normal = getNormals(this.geometry, this.mesh);
 
-        this.players = [];
+        this.players = []; // stack of users currently bowing this plane
     }
 
+    /**
+     * Show the plane (fade in) with specified transition duration
+     * @param {number} time time in seconds for animation
+     */
     show(time = 0.25) {
         this.process = {direction: 1, time: time};
     }
 
+    /**
+     * Hide the plane (fade out) with specified transition duration
+     * @param {number} time time in seconds for animation
+     */
     hide(time = 0.25) {
         this.process = {direction: -1, time: time};
     }
 
+    /**
+     * Update normals of this plane
+     */
     updateNormal() {
         this.normal = getNormals(this.geometry, this.mesh);
     }
 
+    /**
+     * Update opacity of this plane depending on the show/hide process, as well as user selection
+     */
     updateOpacity() {
         if(this.process) {
-            if(this.process.time == 0) {
+            if(this.process.time == 0) { // if process has finished, reset values
                 this.trueOpacity = ( this.direction + 1 ) / 2;
                 this.process = null;
             } 
@@ -754,48 +779,61 @@ class MusicalPlane {
             // line opacity 1 in 0.5s, with interval of 60 updates per second
             let increment = 1 / 60 / this.process.time * this.process.direction;
         
-            if(this.trueOpacity + increment >= 1) {
+            if(this.trueOpacity + increment >= 1) { // if show process has finished, reset values
                 this.trueOpacity = 1;
                 this.process = null;
-            } else if(this.trueOpacity + increment <= 0) {
+            } else if(this.trueOpacity + increment <= 0) { // if hide process has finished, reset values
                 this.trueOpacity = 0;
                 this.process = null;
-                this.lineMaterial.color.set(this.user.color);
+                this.lineMaterial.color.set(this.user.color); // reset color to client user color
                 this.fillMaterial.color.set(this.user.color);
             } else {
-                this.trueOpacity += increment;
+                this.trueOpacity += increment; // updates true opacity based on process
             }
         }
 
-        if(this.selected) {
+        // if plane is selected, overwrite line opacity and color with client
+        if(this.selected) { 
             this.lineMaterial.opacity = 1;
             this.lineMaterial.color.set(this.user.color);
         } else {
             this.lineMaterial.opacity = this.trueOpacity;
             this.lineMaterial.color.set(this.fillMaterial.color);
         }
-        this.fillMaterial.opacity = this.trueOpacity / 4;
+        this.fillMaterial.opacity = this.trueOpacity / 4; // plane is semi-transparent
     }
 
+    /**
+     * Bow the plane, playing the chord associated with it
+     * 
+     * @param {UserSampler} user user initiating bow event
+     */
     bow(user) {
-        user.play(this.number);
+        user.play(this.number); // play this plane on initator's UserSampler
 
-        this.players.push({id: user.id, color: user.color});
+        // add new user to plane's user stack, update plane's color to new user
+        this.players.push({id: user.id, color: user.color}); 
         this.lineMaterial.color.set(user.color);
         this.fillMaterial.color.set(user.color);
 
-        if(this.players.length == 1) this.show();
+        if(this.players.length == 1) this.show(); // show if new user is the first to bow the plane
     }
 
+    /**
+     * Unbow the plane, stopping the chord associated with it
+     * 
+     * @param {UserSampler} user user initiating unbow event
+     */
     unbow(user) {
 
-        user.stop(this.number);
+        user.stop(this.number); // update initiator's UserSampler
 
-        this.players = this.players.filter(userObj => userObj.id != user.id);
+        this.players = this.players.filter(userObj => userObj.id != user.id); // remove user from player stack
 
-        if(this.players.length == 0) {
+        if(this.players.length == 0) { //
             this.hide();
         } else {
+            // if there are other players, set color to most recent player
             let newColor = this.players[this.players.length-1].color;
             this.lineMaterial.color.set(newColor);
             this.fillMaterial.color.set(newColor);
@@ -806,7 +844,17 @@ class MusicalPlane {
 
 }
 
+/**
+ * Representation of a virtual instrument in an icosahedron. Instrument is connected to a recorder and primary user (client)
+ * Instrument contains 15 internal MusicalPlanes that users can interact with
+ */
 class Icosatone {
+    /**
+     * Creates new Icosatone based on a single user and recorder
+     * 
+     * @param {ActiveUser} user primary user, client 
+     * @param {RecordPlayer} recorder record player attached to instrument
+     */
     constructor(user, recorder) {
         this.user = user;
         this.recorder = recorder;
@@ -817,6 +865,7 @@ class Icosatone {
         this.rotationLocked = false;
         this.planeLocked = false;
 
+        // creates icosahedron from indices, adds to Three.js scene
         const icoIndices = [
             0, 11, 5, 	0, 5, 1, 	0, 1, 7, 	0, 7, 10, 	0, 10, 11,
             1, 5, 9, 	5, 11, 4,	11, 10, 2,	10, 7, 6,	7, 1, 8,
@@ -834,16 +883,28 @@ class Icosatone {
         this.wireframe = new Wireframe(wireGeometry, this.lineMaterial);
         scene.add( this.wireframe );
 
+        // creates planes, randomly sets initial rotation of icosahedron upon creation
         this.initPlanes();
         this.rotate(0, Math.random() * 2 * Math.PI, 0);
     }
 
+    /**
+     * Helper function to initalize internal MusicalPlanes
+     */
     initPlanes() {
         for(let i = 0; i < 15; i++) {
             this.planes[i] = new MusicalPlane(i, this.user)
         }
     }
     
+    /**
+     * Rotates icosatone geometry in 3D space based on Euler angles
+     * Updates child MusicalPlanes
+     * 
+     * @param {number} x rotation in x axis, radians
+     * @param {number} y rotation in y axis, radians
+     * @param {number} z rotation in z axis, radians
+     */
     rotate(x, y, z) {
         this.wireframe.rotation.x += x;
         this.wireframe.rotation.y += y;
@@ -860,9 +921,12 @@ class Icosatone {
         }
     }
 
+    /**
+     * Update materials of icosatone, animates rotation
+     */
     update() {
         if(!this.rotationLocked) {
-            this.rotate(0, 0.003, 0);
+            this.rotate(0, 0.003, 0); // rotates around y axis
         }
         this.lineMaterial.resolution.set( window.innerWidth, window.innerHeight );
 
@@ -874,12 +938,19 @@ class Icosatone {
 
     }
 
+    /**
+     * Updates the selected plane of the icosatone based on normal vector
+     * Determines closest MusicalPlane of icosatone in current orientation via cosine similarity of normal vectors
+     * 
+     * @param {array} normalArray array representing normal vector of the user's control plane
+     */
     selectPlane(normalArray) {
 
-        if(this.planeLocked) return;
+        if(this.planeLocked) return; // do nothing if plane is locked (user is currently bowing)
 
         let closestPlane, greatestSimilarity;
 
+        // get most similar plane by comparing normals
         for(let i = 0; i < 15; i++) {
             let plane = this.planes[i];
 
@@ -896,6 +967,7 @@ class Icosatone {
             }
         }
 
+        // update child planes
         for(let i = 0; i < 15; i++) {
             if(i == closestPlane) this.planes[i].selected = true;
             else this.planes[i].selected = false;
@@ -905,28 +977,46 @@ class Icosatone {
         this.selectedPlane = closestPlane;
     }
 
+    /**
+     * Bow internal MusicalPlane of icosatone, tracks to recorder if recording
+     * 
+     * @param {number} planeNum plane number to bow, determines chord
+     * @param {UserSampler} user initator of bow action
+     */
     bow(planeNum, user) {
         if(user.id == -1) {
-            this.planeLocked = true;
+            this.planeLocked = true; // locks plane if user is client
         }
     
         this.planes[planeNum].bow(user);
-        if(this.recorder.isRecording) {
+        if(this.recorder.isRecording) { // update recorder if applicable
             this.recorder.recordStroke('bow', planeNum, user.id);
         }
     }
 
+    /**
+     * Unbow internal MusicalPlane of icosatone, tracks to recorder if recording
+     * 
+     * @param {number} planeNum plane number to unbow, determines chord
+     * @param {UserSampler} user initator of unbow action
+     */
     unbow(planeNum, user) {
         if(user.id == -1) {
-            this.planeLocked = false;
+            this.planeLocked = false; // unlocks plane if user is client
         }
 
         this.planes[planeNum].unbow(user);
-        if(this.recorder.isRecording) {
+        if(this.recorder.isRecording) { // update recorder if applicable
             this.recorder.recordStroke('unbow', planeNum, user.id);
         }
     }
 
+    
+    /**
+     * Unbow all internal MusicalPlanes of icosatone, tracks to recorder if recording
+     * 
+     * @param {UserSampler} user initator of unbowAll action
+     */
     unbowAll(user) {
         for(let plane of this.planes) {
             plane.unbow(user);
@@ -934,9 +1024,20 @@ class Icosatone {
     }
 }
 
+/**
+ * Representation of simple record player with playback and recording functionality paired with icosatone
+ * Recorder can store up to 15 recordings, FIFO. Recording lasts up to 600 frames
+ */
 class RecordPlayer {
+
+    /**
+     * Create new RecordPlayer
+     */
     constructor() {
+
+        // representation of a recorder
         this.recorder = null;
+
         this.recordedUsers = new Set();
         this.recordingAlbum = [];
 
@@ -949,36 +1050,57 @@ class RecordPlayer {
         this.instrument = null;
     }
 
+    /**
+     * Records an action to the current recording
+     * 
+     * @param {string} stroke type of action ("bow", "unbow", "unbowAll")
+     * @param {number} planeNum plane number of icosatone associated with action
+     * @param {string} uid socket id of action initiator
+     */
     recordStroke(stroke, planeNum, uid) {
         if(!this.isRecording || this.isPlaying) throw new Error(`failed to record stroke: isRecording = ${this.isRecording}, isPlaying = ${this.isPlaying}`);
 
+        // stores to list of all users 
         if(!this.recordedUsers.has(uid)) {
             this.recordedUsers.add(uid);
         }
 
+        // adds action to the current frame of the recorder
         this.recorder[this.currentFrame].push({stroke: stroke, planeNum: planeNum , id: uid + "_instance"});
     }
 
+    /**
+     * Start new recording, resetting previous recording cache to empty
+     */
     startRecording() {
         if(this.isRecording || this.isPlaying) throw new Error(`failed to start recording: isRecording = ${this.isRecording}, isPlaying = ${this.isPlaying}`);
+        
+        // sets recorder to empty array of length 600, one per frame
+        // each entry of the 600 is an empty array to store actions occuring on the frame
         this.recorder = Array.from({length: 600}, ()=> []);
         this.currentFrame = 0;
         this.isRecording = true;
     }
 
+    /**
+     * Stop the recording, upload to socket server
+     */
     stopRecording() {
         if(this.isPlaying) throw new Error(`failed to end recording: isRecording = ${this.isRecording}, isPlaying = ${this.isPlaying}`);
 
+        // alert and do nothing if recording is empty
         if(this.recordedUsers.size == 0) {
             this.isRecording = false;
             alert('Recording empty, not saved');
             return;
         }
 
+        // conclude recording by cutting off all remaining active actions by each user
         for(let user of this.recordedUsers) {
             this.recorder[this.currentFrame].push({stroke: 'unbowAll', id: user + "_instance"});
         }
 
+        // send to socket server
         socket.emit('new-recording', [this.recorder, [...this.recordedUsers]]);
 
         this.recordedUsers.clear();
@@ -986,9 +1108,15 @@ class RecordPlayer {
         
     }
 
+    /**
+     * Starts playing a recording stored in th recordingAlbum
+     * 
+     * @param {number} id id (time created) of recording to play
+     */
     startPlaying(id) {
         if(this.isRecording || this.isPlaying) throw new Error(`failed to start playing: isRecording = ${this.isRecording}, isPlaying = ${this.isPlaying}`);
 
+        // gets recording number from id
         let recordingNum = null;
         for(let i = 0; i < this.recordingAlbum.length; i++) {
             if(this.recordingAlbum[i].timeCreated == id) {
@@ -999,11 +1127,15 @@ class RecordPlayer {
 
         if(recordingNum == null) throw new Error(`failed to start playing: recording not found`);
 
+        // sets playback to recording if found
         this.playback = this.recordingAlbum[recordingNum];
         this.currentFrame = 0;
         this.isPlaying = true;
     }
 
+    /**
+     * Stops playback
+     */
     stopPlaying() {
         if(this.isRecording) throw new Error(`failed to stop playing: isRecording = ${this.isRecording}, isPlaying = ${this.isPlaying}`);
 
@@ -1011,6 +1143,9 @@ class RecordPlayer {
         this.isPlaying = false;
     }
 
+    /**
+     * Update playback, dispatching actions based on the current frame
+     */
     updatePlayer() {
         for(let stroke of this.playback.recording[this.currentFrame]) {
             switch (stroke.stroke) {
@@ -1026,6 +1161,9 @@ class RecordPlayer {
         }
     }
 
+    /**
+     * Update RecordPlayer based on current status of playing or recording every frame
+     */
     update() {
         if(!this.isPlaying && !this.isRecording) return;
 
@@ -1033,6 +1171,7 @@ class RecordPlayer {
 
         this.currentFrame++;
 
+        // end recording or playing if frame has reached limit
         if(this.currentFrame == 600) {
             this.currentFrame--;
             if(this.isRecording) {
@@ -1044,19 +1183,36 @@ class RecordPlayer {
     }
 }
 
+/**
+ * Set of samplers associated with a user interacting with icosatone
+ * Each user is assigned their own sampler and unique color
+ */
 class UserSampler {
+    /**
+     * Create new UserSampler with unique color and id
+     * 
+     * @param {string} color hsl string representing color of UserSampler
+     * @param {string} id socket id of user
+     */
     constructor(color, id) {
+
+        // create new Tone.js sampler
         this.sampler = new Tone.Sampler({
             "A3": "samples/A3.mp3",
         }).toDestination();
+
         this.color = color;
-        this.soundLoops = new Array(15);
+        this.soundLoops = new Array(15); 
         this.soundTimeout = null;
         this.id = id;
 
         this.initSampler();
     }
 
+    /**
+     * Helper function to initiate properties of Tone.js sampler
+     * Creates Tone.js Loops for each chord using the sampler to allow sustained playing
+     */
     initSampler() {
         const vibrato = new Tone.Vibrato({
             maxDelay : 0.005 ,
@@ -1073,6 +1229,7 @@ class UserSampler {
         this.sampler.connect(vibrato);
         this.sampler.connect(reverb);
 
+        // creates 15 loops (one per plane of icosatone), each triggering every second
         for(let i = 0; i < 15; i++) {
             this.soundLoops[i] = new Tone.Loop((time)=> {
                 this.sampler.triggerAttack(chords[i].pitches);
@@ -1080,34 +1237,66 @@ class UserSampler {
         }
     }
 
+    /**
+     * Play chord using sampler, starting the associated loop
+     * 
+     * @param {number} chordNum number of chord to play
+     */
     play(chordNum) {
         clearInterval(this.soundTimeout);
         let now = Tone.now();
+
+        // starts sound loop and also triggers sound immediately since actions aren't necessarily synced with Tone transport
         this.soundLoops[chordNum].start(now);
         this.sampler.triggerAttack(chords[chordNum].pitches);
+
+        // triggers sound after 0.25s delay in case the chord was stopped then started (doubleclick)
         this.soundTimeout = setTimeout(()=>{this.sampler.triggerAttack(chords[chordNum].pitches)}, 250);
     }
 
+    /**
+     * Stop playing chord using sampler, stopping the associated loop
+     * 
+     * @param {number} chordNum number of chord to stop
+     */
     stop(chordNum) {
         clearTimeout(this.soundTimeout);
         let now = Tone.now();
+
+        // stops sound loop and triggers release immediately
         this.soundLoops[chordNum].stop(now);
         this.sampler.triggerRelease(chords[chordNum].pitches);
+
+        // triggers cutoff after 0.25s delay in case the next cycle of the loop already triggered
         this.soundTimeout = setInterval(()=>{this.sampler.triggerRelease(chords[chordNum].pitches)}, 10);
     }
 }
 
+/**
+ * Wrapper for active client, stores hidden user control plane
+ */
 class ActiveUser {
+
+    /**
+     * Create new ActiveUser with specified color
+     * @param {string} color hsl representation of color
+     */
     constructor(color) {
         this.color = color;
-        this.sampler = new UserSampler(color, -1);
+        this.sampler = new UserSampler(color, -1); // -1 id represents active user
         this.plane = null;
         this.sustain = false;
 
         this.initPlane();
 
     }
+
+    /**
+     * Helper function to create user control plane
+     */
     initPlane() {
+
+        // creates plane at center of scene
         const userPlaneVertices = new Float32Array([
             -1, 0, -1,
             -1, 0, 1,
@@ -1145,20 +1334,30 @@ class ActiveUser {
         };
     }
 
+    /**
+     * Updates the rotation of the user plane based on location of user's mouse
+     * Called by window mousemove event listener
+     * 
+     * @param {MouseEvent} ev mouse move event
+     * @param {Icosatone} instrument scene icosatone to interact with
+     */
     updatePlane(ev, instrument) {
-        if(instrument.planeLocked) return;
+        if(instrument.planeLocked) return; // do nothing if plane is locked (user is already bowing)
     
+        // gets rotation Z and X based on mouse position on the plane
         let newRotation = [ -1 * (ev.clientX / window.innerWidth - 0.5) * Math.PI, (ev.clientY / window.innerHeight - 0.5) * Math.PI];
     
+        // normalizes rotation amount
         let magnitude = Math.sqrt(Math.pow(newRotation[0], 2) + Math.pow(newRotation[1], 2))
         if(magnitude > Math.PI / 2) {
             newRotation[0] = newRotation[0] / magnitude * Math.PI / 2;
             newRotation[1] = newRotation[1] / magnitude * Math.PI / 2;
         }
     
+        // updates plane and normals
         this.plane.mesh.rotation.z = newRotation[0];
         this.plane.mesh.rotation.x = newRotation[1];
-    
+
         this.plane.normal = getNormals(this.plane.geometry, this.plane.mesh);
     }
 }
