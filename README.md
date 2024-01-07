@@ -1,8 +1,8 @@
 # Icosatonic
 Virtual, collaborative instrument   
-Live at http://esz7923.imany.io:8080/
-Edward Zhou 12/2023
-
+Live at http://esz7923.imany.io:8080/   
+Edward Zhou 12/2023   
+   
 Summary  
 ---
 Icosatonic is a virtual space that allows users to collaboratively play a digital instrument to produce unique and mesmerizing music without requiring extensive musical knowledge or practice. Users can play the instrument live and hear others’ playing simultaneously. Users can also record music created within a short time span, which is stored temporarily and anonymously.   
