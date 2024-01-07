@@ -1,7 +1,11 @@
 # Icosatonic
+
 Virtual, collaborative instrument   
+
 Live at http://esz7923.imany.io:8080/   
+
 Edward Zhou 12/2023   
+
    
 Summary  
 ---
