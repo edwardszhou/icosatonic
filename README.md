@@ -1,7 +1,13 @@
 Summary  
 ---
 Icosatonic is a virtual space that allows users to collaboratively play a digital instrument to produce unique and mesmerizing music without requiring extensive musical knowledge or practice. Users can play the instrument live and hear others’ playing simultaneously. Users can also record music created within a short time span, which is stored temporarily and anonymously.   
-   
+
+Demo
+---
+
+https://github.com/edwardszhou/icosatonic/assets/123663456/1e966a52-a09b-49ba-8233-78e1c6b4344f
+
+
 Motivation  
 ---  
 I created this project as an attempt to allow live music to be shared between users who may not be proficient in music or may not have the time and dedication to practice an instrument, but still want to create something beautiful with others. Music is a shared experience, and I wanted to reimagine music in a virtual space using a virtual instrument. Furthermore, I wanted to maintain the ephemeral value of live music while also de-stigmatizing musical exploration by providing an anonymous, short library of music where users can share and enjoy others’ creations as well.
